@@ -7,7 +7,7 @@ from prometheus_client import (
     generate_latest, CONTENT_TYPE_LATEST
 )
 
-# --- Try to import the Kubernetes client (optional) ---
+# Optional Kubernetes imports (app still runs without them)
 HAS_K8S = True
 try:
     from kubernetes import client, config, watch
@@ -18,10 +18,10 @@ except Exception as e:
 # -------------------------
 # Config (env vars)
 # -------------------------
-MAX_INFLIGHT = int(os.getenv("MAX_INFLIGHT", "200"))
-CPU_MS = int(os.getenv("CPU_MS", "20"))
+MAX_INFLIGHT = int(os.getenv("MAX_INFLIGHT", "200"))  # 503 threshold
+CPU_MS = int(os.getenv("CPU_MS", "20"))               # CPU per request
 WATCH_NAMESPACE = os.getenv("WATCH_NAMESPACE", "default")
-WATCH_SELECTOR  = os.getenv("WATCH_SELECTOR",  "app=stress-app")
+WATCH_SELECTOR  = os.getenv("WATCH_SELECTOR", "app=stress-app")
 ENABLE_K8S_WATCHERS = os.getenv("ENABLE_K8S_WATCHERS", "1") == "1"
 
 # -------------------------
@@ -35,9 +35,9 @@ REQ_HIST = Histogram("loadgen_request_duration_seconds",
 NODE_READY_SECONDS = Gauge("k8s_node_ready_seconds",
                            "Seconds from Node creationTimestamp to first Ready=True",
                            ["node"], registry=REG)
-NODE_READY_GAUGE   = Gauge("k8s_node_ready_gauge",
-                           "Node Ready flag (1=Ready, 0=NotReady)",
-                           ["node"], registry=REG)
+NODE_READY_GAUGE = Gauge("k8s_node_ready_gauge",
+                         "Node Ready flag (1=Ready, 0=NotReady)",
+                         ["node"], registry=REG)
 POD_SCHEDULE_SECONDS = Gauge("k8s_pod_schedule_seconds",
                              "Seconds from Pod Pending to first Running",
                              ["pod","node"], registry=REG)
@@ -160,7 +160,6 @@ def watch_pods():
             w = watch.Watch()
             selector = WATCH_SELECTOR
 
-            # prime
             now = datetime.now(timezone.utc)
             for p in v1.list_namespaced_pod(WATCH_NAMESPACE, label_selector=selector).items:
                 if p.status.phase == "Pending":
@@ -170,7 +169,6 @@ def watch_pods():
                     d = (now - start).total_seconds() if isinstance(start, datetime) else 0
                     POD_SCHEDULE_SECONDS.labels(pod=p.metadata.name, node=(p.spec.node_name or "unknown")).set(max(0, d))
 
-            # stream
             for ev in w.stream(v1.list_namespaced_pod, WATCH_NAMESPACE, label_selector=selector, _request_timeout=300):
                 p = ev["object"]
                 uid = p.metadata.uid
