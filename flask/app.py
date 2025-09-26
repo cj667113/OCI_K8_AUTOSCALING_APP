@@ -1,53 +1,36 @@
-# app.py
-import os, time, math, threading
+# app.py (fixed)
+import os, time, math, threading, sys
 from datetime import datetime, timezone
 from flask import Flask, Response, request
 from prometheus_client import CollectorRegistry, Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
-from kubernetes import client, config, watch
+
+# --- Optional Kubernetes import ---
+HAS_K8S = True
+try:
+    from kubernetes import client, config, watch
+except Exception as e:
+    HAS_K8S = False
+    print(f"[autoscale-probe] Kubernetes client not available at import time: {e}", file=sys.stderr)
 
 # -------------------------
 # Config (env vars)
 # -------------------------
-MAX_INFLIGHT = int(os.getenv("MAX_INFLIGHT", "200"))         # threshold for 503
-CPU_MS = int(os.getenv("CPU_MS", "20"))                       # CPU work per request
+MAX_INFLIGHT = int(os.getenv("MAX_INFLIGHT", "200"))
+CPU_MS = int(os.getenv("CPU_MS", "20"))
 WATCH_NAMESPACE = os.getenv("WATCH_NAMESPACE", "default")
 WATCH_SELECTOR = os.getenv("WATCH_SELECTOR", "app=stress-app")
+ENABLE_K8S_WATCHERS = os.getenv("ENABLE_K8S_WATCHERS", "1") == "1"
 
 # -------------------------
 # Prometheus metrics
 # -------------------------
 REG = CollectorRegistry()
 
-REQ_COUNTER = Counter(
-    "loadgen_requests_total",
-    "Total /hot requests by status",
-    ["status"],
-    registry=REG,
-)
-REQ_HIST = Histogram(
-    "loadgen_request_duration_seconds",
-    "Duration of /hot requests (seconds)",
-    registry=REG,
-)
-
-NODE_READY_SECONDS = Gauge(
-    "k8s_node_ready_seconds",
-    "Seconds from Node creationTimestamp to first Ready=True",
-    ["node"],
-    registry=REG,
-)
-NODE_READY_GAUGE = Gauge(
-    "k8s_node_ready_gauge",
-    "Node Ready flag (1=Ready, 0=NotReady)",
-    ["node"],
-    registry=REG,
-)
-POD_SCHEDULE_SECONDS = Gauge(
-    "k8s_pod_schedule_seconds",
-    "Seconds from Pod Pending to first Running",
-    ["pod", "node"],
-    registry=REG,
-)
+REQ_COUNTER = Counter("loadgen_requests_total","Total /hot requests by status",["status"],registry=REG)
+REQ_HIST = Histogram("loadgen_request_duration_seconds","Duration of /hot requests (seconds)",registry=REG)
+NODE_READY_SECONDS = Gauge("k8s_node_ready_seconds","Seconds from Node creationTimestamp to first Ready=True",["node"],registry=REG)
+NODE_READY_GAUGE = Gauge("k8s_node_ready_gauge","Node Ready flag (1=Ready, 0=NotReady)",["node"],registry=REG)
+POD_SCHEDULE_SECONDS = Gauge("k8s_pod_schedule_seconds","Seconds from Pod Pending to first Running",["pod","node"],registry=REG)
 
 # -------------------------
 # Concurrency gate
@@ -58,7 +41,7 @@ def _busy_ms(ms: int):
     end = time.time() + (ms / 1000.0)
     x = 0.0
     while time.time() < end:
-        x += math.sqrt(12345.6789)  # dummy CPU
+        x += math.sqrt(12345.6789)
 
 # -------------------------
 # Flask app
@@ -69,22 +52,18 @@ application = app  # for mod_wsgi
 @app.get("/hot")
 def hot():
     start = time.time()
-    got = _gate.acquire(blocking=False)
-    if not got:
+    if not _gate.acquire(blocking=False):
         REQ_COUNTER.labels(status="503").inc()
         return ("busy", 503)
-
     try:
-        # allow per-request override: /hot?cpu_ms=40
         ms = CPU_MS
-        try:
-            if "cpu_ms" in request.args:
+        if "cpu_ms" in request.args:
+            try:
                 ms = max(0, int(request.args["cpu_ms"]))
-        except Exception:
-            pass
-
+            except Exception:
+                pass
         _busy_ms(ms)
-        REQ_HIST.observe(time.time() - start)
+        REQ_HIST.observe(time.Since(start) if False else time.time() - start)  # keep simple, no perf loss
         REQ_COUNTER.labels(status="200").inc()
         return "ok\n", 200
     finally:
@@ -103,7 +82,7 @@ def root():
     return "autoscale-probe: /hot, /metrics, /healthz\n"
 
 # -------------------------
-# K8s watchers (nodes & pods)
+# K8s watchers (nodes & pods) - guarded and lazy
 # -------------------------
 def _node_is_ready(n):
     for cond in (n.status.conditions or []):
@@ -122,13 +101,14 @@ def watch_nodes():
         try:
             try:
                 config.load_incluster_config()
+                print("[autoscale-probe] using in-cluster k8s config", file=sys.stderr)
             except Exception:
                 config.load_kube_config()
+                print("[autoscale-probe] using local kubeconfig", file=sys.stderr)
             v1 = client.CoreV1Api()
             w = watch.Watch()
-            # prime existing nodes once
-            nodes = v1.list_node().items
-            for n in nodes:
+            # prime
+            for n in v1.list_node().items:
                 name = n.metadata.name
                 NODE_READY_GAUGE.labels(node=name).set(1 if _node_is_ready(n) else 0)
                 rt = _node_ready_transition(n)
@@ -136,7 +116,6 @@ def watch_nodes():
                     d = (rt - n.metadata.creation_timestamp).total_seconds()
                     if d > 0:
                         NODE_READY_SECONDS.labels(node=name).set(d)
-            # stream updates
             for ev in w.stream(v1.list_node, _request_timeout=300):
                 n = ev["object"]
                 name = n.metadata.name
@@ -150,11 +129,10 @@ def watch_nodes():
                 else:
                     NODE_READY_GAUGE.labels(node=name).set(0)
         except Exception as e:
-            # simple backoff and retry
+            print(f"[autoscale-probe] watch_nodes error: {e}", file=sys.stderr)
             time.sleep(2)
 
 def watch_pods():
-    # track first Pending timestamps
     pending_seen = {}
     while True:
         try:
@@ -164,23 +142,15 @@ def watch_pods():
                 config.load_kube_config()
             v1 = client.CoreV1Api()
             w = watch.Watch()
-
-            # list+stream with label selector
             selector = WATCH_SELECTOR
-            # prime existing pods
-            pods = v1.list_namespaced_pod(WATCH_NAMESPACE, label_selector=selector).items
             now = datetime.now(timezone.utc)
-            for p in pods:
+            for p in v1.list_namespaced_pod(WATCH_NAMESPACE, label_selector=selector).items:
                 if p.status.phase == "Pending":
                     pending_seen[p.metadata.uid] = now
                 if p.status.phase == "Running":
-                    start = pending_seen.get(p.metadata.uid)
-                    if not start:
-                        start = (p.status.start_time or now)
-                    d = (now - start).total_seconds() if isinstance(start, datetime) else (now - start).total_seconds()
+                    start = pending_seen.get(p.metadata.uid) or (p.status.start_time or now)
+                    d = (now - start).total_seconds() if isinstance(start, datetime) else 0
                     POD_SCHEDULE_SECONDS.labels(pod=p.metadata.name, node=(p.spec.node_name or "unknown")).set(max(0, d))
-
-            # stream
             for ev in w.stream(v1.list_namespaced_pod, WATCH_NAMESPACE, label_selector=selector, _request_timeout=300):
                 p = ev["object"]
                 uid = p.metadata.uid
@@ -190,22 +160,26 @@ def watch_pods():
                     pending_seen[uid] = now
                 if phase == "Running":
                     start = pending_seen.get(uid) or (p.status.start_time or now)
-                    if isinstance(start, datetime):
-                        d = (now - start).total_seconds()
-                    else:
-                        d = (now - datetime.fromtimestamp(start, tz=timezone.utc)).total_seconds()
+                    d = (now - start).total_seconds() if isinstance(start, datetime) else 0
                     POD_SCHEDULE_SECONDS.labels(pod=p.metadata.name, node=(p.spec.node_name or "unknown")).set(max(0, d))
-        except Exception:
+        except Exception as e:
+            print(f"[autoscale-probe] watch_pods error: {e}", file=sys.stderr)
             time.sleep(2)
 
 def _start_watchers_once():
+    if not HAS_K8S:
+        print("[autoscale-probe] k8s watchers disabled: kubernetes client not available", file=sys.stderr)
+        return
     t1 = threading.Thread(target=watch_nodes, daemon=True)
     t2 = threading.Thread(target=watch_pods, daemon=True)
-    t1.start()
-    t2.start()
+    t1.start(); t2.start()
+    print("[autoscale-probe] k8s watchers started", file=sys.stderr)
 
-_start_watchers_once()
+# Only start watchers if enabled and kubernetes is importable
+if ENABLE_K8S_WATCHERS and HAS_K8S:
+    _start_watchers_once()
+else:
+    print(f"[autoscale-probe] watchers not started (ENABLE_K8S_WATCHERS={ENABLE_K8S_WATCHERS}, HAS_K8S={HAS_K8S})", file=sys.stderr)
 
 if __name__ == "__main__":
-    # Dev only; in container use Apache/mod_wsgi.
     app.run(host="0.0.0.0", port=8080)
