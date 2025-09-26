@@ -1,7 +1,7 @@
 # docker/Dockerfile
 FROM ubuntu:latest
 
-# Prevent tzdata / apt from prompting
+# Prevent apt from asking questions
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install build dependencies required by mod-wsgi-httpd (APR + httpd)
@@ -27,7 +27,7 @@ ENV MOD_WSGI_PROCESSES=1 \
     MOD_WSGI_THREADS=16 \
     PORT=8080
 
-# Generate a tiny Apache config and run under mod_wsgi-express
+# Generate a minimal Apache config for mod_wsgi-express
 RUN mod_wsgi-express module-config > /tmp/mod_wsgi.conf && \
     printf '%s\n' \
     "ServerName localhost" \
@@ -40,4 +40,5 @@ RUN mod_wsgi-express module-config > /tmp/mod_wsgi.conf && \
     > /app/httpd.conf
 
 EXPOSE 8080
+
 CMD ["bash","-lc","mod_wsgi-express start-server --log-to-terminal --port ${PORT} --user www-data --group www-data /app/app.py -c /app/httpd.conf"]
