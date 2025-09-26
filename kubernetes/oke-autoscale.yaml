@@ -143,8 +143,8 @@ metadata:
   name: system:aggregated-metrics-reader
 rules:
 - apiGroups: ["metrics.k8s.io"]
-  resources: ["pods", "nodes"]
-  verbs: ["get", "list", "watch"]
+  resources: ["pods","nodes"]
+  verbs: ["get","list","watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -152,7 +152,7 @@ metadata:
   name: system:metrics-server
 rules:
 - apiGroups: [""]
-  resources: ["pods","nodes","nodes/stats","namespaces","configmaps"]
+  resources: ["pods","nodes","nodes/stats","nodes/proxy","nodes/metrics","namespaces","configmaps"]
   verbs: ["get","list","watch"]
 - nonResourceURLs: ["/metrics"]
   verbs: ["get"]
@@ -197,6 +197,7 @@ subjects:
   name: metrics-server
   namespace: kube-system
 ---
+# Service that exposes port 443 -> container 4443
 apiVersion: v1
 kind: Service
 metadata:
@@ -208,7 +209,7 @@ spec:
   ports:
   - name: https
     port: 443
-    targetPort: 4443
+    targetPort: https
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -218,6 +219,8 @@ metadata:
   labels: { k8s-app: metrics-server }
 spec:
   replicas: 1
+  strategy:
+    type: Recreate           # ensure only one pod; avoids old pod sticking around
   selector:
     matchLabels: { k8s-app: metrics-server }
   template:
@@ -230,9 +233,6 @@ spec:
       - key: "node-role.kubernetes.io/control-plane"
         operator: "Exists"
         effect: "NoSchedule"
-      volumes:
-      - name: tmp-dir
-        emptyDir: {}
       containers:
       - name: metrics-server
         image: registry.k8s.io/metrics-server/metrics-server:v0.7.2
@@ -240,29 +240,28 @@ spec:
         args:
         - --cert-dir=/tmp
         - --secure-port=4443
-        - --kubelet-insecure-tls
         - --kubelet-preferred-address-types=InternalIP,Hostname,ExternalIP
+        - --kubelet-use-node-status-port
+        - --kubelet-insecure-tls
         - --metric-resolution=15s
         ports:
         - name: https
           containerPort: 4443
         livenessProbe:
-          httpGet: { path: /livez,  port: https, scheme: HTTPS }
+          httpGet: { path: /livez, port: https, scheme: HTTPS }
           initialDelaySeconds: 20
           periodSeconds: 10
         readinessProbe:
           httpGet: { path: /readyz, port: https, scheme: HTTPS }
           initialDelaySeconds: 20
           periodSeconds: 10
-        volumeMounts:
-        - name: tmp-dir
-          mountPath: /tmp
         securityContext:
           readOnlyRootFilesystem: true
         resources:
           requests: { cpu: 50m, memory: 60Mi }
           limits:   { cpu: 200m, memory: 200Mi }
 ---
+# APIService points to Service on port 443
 apiVersion: apiregistration.k8s.io/v1
 kind: APIService
 metadata:
@@ -276,7 +275,7 @@ spec:
   service:
     name: metrics-server
     namespace: kube-system
-    # (defaults to 443)
+    port: 443
 
 # =========================
 # MONITORING: Prometheus (scrapes autoscale app)
