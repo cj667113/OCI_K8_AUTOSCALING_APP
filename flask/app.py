@@ -1,5 +1,5 @@
 # app.py
-import os, time, math, threading, sys, hashlib
+import os, time, threading, sys, hashlib
 from datetime import datetime, timezone
 from flask import Flask, Response, request
 from prometheus_client import (
@@ -7,7 +7,7 @@ from prometheus_client import (
     generate_latest, CONTENT_TYPE_LATEST
 )
 
-# --- Optional Kubernetes client (app still runs without it) ---
+# ----- Optional Kubernetes client (app still runs without it)
 HAS_K8S = True
 try:
     from kubernetes import client, config, watch
@@ -18,10 +18,10 @@ except Exception as e:
 # -------------------------
 # Config (env vars)
 # -------------------------
-MAX_INFLIGHT       = int(os.getenv("MAX_INFLIGHT", "200"))    # per-process cap before returning 503
-ACQUIRE_TIMEOUT_MS = int(os.getenv("ACQUIRE_TIMEOUT_MS", "0"))# 0=immediate 503; >0=wait then 503
-CPU_MS             = int(os.getenv("CPU_MS", "20"))           # default CPU burn per request (ms)
-PBKDF2_ITERS       = int(os.getenv("PBKDF2_ITERS", "200000")) # CPU intensity for PBKDF2
+MAX_INFLIGHT       = int(os.getenv("MAX_INFLIGHT", "200"))     # concurrent requests before 503
+ACQUIRE_TIMEOUT_MS = int(os.getenv("ACQUIRE_TIMEOUT_MS", "0")) # 0=immediate 503; >0=wait then 503
+CPU_MS             = int(os.getenv("CPU_MS", "20"))            # default per-request burn (ms)
+PBKDF2_ITERS       = int(os.getenv("PBKDF2_ITERS", "200000"))  # PBKDF2 iterations (CPU intensity)
 WATCH_NS           = os.getenv("WATCH_NAMESPACE", "default")
 WATCH_SEL          = os.getenv("WATCH_SELECTOR",  "app=stress-app")
 ENABLE_K8S         = os.getenv("ENABLE_K8S_WATCHERS", "1") == "1"
@@ -50,30 +50,49 @@ INFLIGHT = Gauge("loadgen_inflight", "In-flight requests (per-process)", registr
 # -------------------------
 _gate = threading.BoundedSemaphore(MAX_INFLIGHT)
 
+_payload = b"x" * 64
+_salt = b"salt"  # fixed salt; we only care about CPU work, not cryptographic properties
+
 def _busy_ms(ms: int):
-    """Burn CPU for ~ms using PBKDF2 (C code releases GIL, scales across threads)."""
+    """Burn CPU for approximately `ms` using PBKDF2 (C code -> releases the GIL)."""
     end = time.time() + (ms / 1000.0)
-    payload = b"x" * 64
     while time.time() < end:
-        hashlib.pbkdf2_hmac("sha256", payload, b"salt", PBKDF2_ITERS)
+        hashlib.pbkdf2_hmac("sha256", _payload, _salt, PBKDF2_ITERS)
+
+def _burn_parallel(ms: int, parallel: int):
+    """Run PBKDF2 in parallel threads. PBKDF2 releases GIL -> scales across cores."""
+    threads = []
+    for _ in range(parallel):
+        t = threading.Thread(target=_busy_ms, args=(ms,))
+        t.start()
+        threads.append(t)
+    for t in threads:
+        t.join()
 
 # -------------------------
 # Flask app
 # -------------------------
 app = Flask(__name__)
-application = app  # for mod_wsgi
+application = app  # for mod_wsgi compatibility (if ever used)
 
 @app.get("/hot")
 def hot():
     start = time.time()
 
-    # how long to burn per request
+    # burn time (ms) per thread
     try:
         ms = max(0, int(request.args.get("cpu_ms", CPU_MS)))
     except Exception:
         ms = CPU_MS
 
-    # admission control: generate 503s *from the app*
+    # fan-out threads (default 1). For “use the whole node”, pass parallel≈#cores (or higher).
+    try:
+        parallel = int(request.args.get("parallel", "1"))
+    except Exception:
+        parallel = 1
+    parallel = max(1, min(parallel, (os.cpu_count() or 1) * 8))  # sane cap
+
+    # admission control: generate 503s when saturated
     if ACQUIRE_TIMEOUT_MS <= 0:
         acquired = _gate.acquire(blocking=False)  # instant 503 if busy
     else:
@@ -85,7 +104,11 @@ def hot():
 
     INFLIGHT.inc()
     try:
-        _busy_ms(ms)
+        if parallel == 1:
+            _busy_ms(ms)
+        else:
+            _burn_parallel(ms, parallel)
+
         REQ_HIST.observe(time.time() - start)
         REQ_COUNTER.labels(status="200").inc()
         return "ok\n", 200
@@ -103,7 +126,7 @@ def healthz():
 
 @app.get("/")
 def root():
-    return "autoscale-probe: endpoints: /hot?cpu_ms=NN, /metrics, /healthz\n", 200
+    return "autoscale-probe: /hot?cpu_ms=NN&parallel=M, /metrics, /healthz\n", 200
 
 # -------------------------
 # Kubernetes watchers (optional)
@@ -216,4 +239,6 @@ else:
     print(f"[autoscale-probe] watchers not started (ENABLE_K8S_WATCHERS={ENABLE_K8S}, HAS_K8S={HAS_K8S})", file=sys.stderr)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+    # Flask dev server is fine here; threaded=True allows concurrent handlers,
+    # PBKDF2 releases the GIL so threads will use multiple cores.
+    app.run(host="0.0.0.0", port=8080, threaded=True)

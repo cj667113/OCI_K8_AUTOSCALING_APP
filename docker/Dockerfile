@@ -25,25 +25,35 @@ RUN python3 -m venv /opt/venv && \
       prometheus_client \
       kubernetes
 
-# App code (must include wsgi.py exporting "application")
+# App code
 WORKDIR /var/www/app
 COPY flask/ /var/www/app/
 
+# Provide a fallback wsgi.py if missing
+# (expects your Flask app exposes `application` in app.py as you showed)
+RUN if [ ! -f /var/www/app/wsgi.py ]; then \
+      printf '%s\n' \
+      'try:' \
+      '    from app import application as application' \
+      'except Exception:' \
+      '    # Fallback: if your Flask object is named "app"' \
+      '    from app import app as application' \
+      > /var/www/app/wsgi.py ; \
+    fi
+
 # Apache vhost:
 # - Listen on 8080
-# - 16 mod_wsgi daemon processes, 1 thread each (maps well to 16 cores)
-# - queue-timeout=0 => do NOT queue in mod_wsgi; if all workers busy, return 503
-# - WSGIApplicationGroup %{GLOBAL} to avoid sub-interpreter overhead
-# - No MPM limits here; let Apache accept connections freely and hand off to daemon
+# - 16 mod_wsgi daemon processes, 1 thread each
+# - queue-timeout=0 => do NOT queue; if all workers busy, return 503
+# - WSGIApplicationGroup %{GLOBAL}
 RUN printf 'ServerName localhost\n' >> /etc/apache2/apache2.conf && \
     printf 'Listen 8080\n' >> /etc/apache2/ports.conf && \
     a2enmod wsgi && \
     printf '%s\n' \
     "<VirtualHost *:8080>" \
     "    ServerName localhost" \
-    "    # 16 single-threaded workers so the app can peg up to 16 CPU cores" \
-    "    WSGIDaemonProcess app processes=16 threads=1 queue-timeout=0 " \
-    "        python-home=/opt/venv python-path=/var/www/app display-name=%{GROUP}" \
+    "    # Single-threaded workers so PBKDF2 threads can peg cores" \
+    "    WSGIDaemonProcess app processes=16 threads=1 queue-timeout=0 python-home=/opt/venv python-path=/var/www/app display-name=%{GROUP}" \
     "    WSGIProcessGroup app" \
     "    WSGIScriptAlias / /var/www/app/wsgi.py" \
     "    WSGIApplicationGroup %{GLOBAL}" \
