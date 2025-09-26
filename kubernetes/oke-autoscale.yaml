@@ -33,49 +33,71 @@ subjects:
 - kind: ServiceAccount
   name: autoscale-probe
   namespace: autoscale
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: autoscale-probe
   namespace: autoscale
-  labels: { app: autoscale-probe }
+  labels:
+    app: autoscale-probe
 spec:
   replicas: 1
   selector:
-    matchLabels: { app: autoscale-probe }
+    matchLabels:
+      app: autoscale-probe
   template:
     metadata:
-      labels: { app: autoscale-probe }
+      labels:
+        app: autoscale-probe
     spec:
+      # faster shutdown between tests
+      terminationGracePeriodSeconds: 5
       serviceAccountName: autoscale-probe
       containers:
       - name: app
         image: ghcr.io/cj667113/oci_k8_autoscaling_app:latest
         imagePullPolicy: IfNotPresent
         env:
-        - { name: MAX_INFLIGHT,        value: "16" }   # allows 16 concurrent burns -> 503s beyond that
-        - { name: ACQUIRE_TIMEOUT_MS,  value: "0" }    # immediate 503 when saturated
-        - { name: CPU_MS,              value: "750" }
-        - { name: PBKDF2_ITERS,        value: "200000" }
-        - { name: WATCH_NAMESPACE,     value: "autoscale" }
-        - { name: WATCH_SELECTOR,      value: "app=workload" }
+          # allow far more concurrent burns than cores so the app isn't the bottleneck
+          - name: MAX_INFLIGHT
+            value: "64"
+          # return 503 immediately when all worker slots are busy
+          - name: ACQUIRE_TIMEOUT_MS
+            value: "0"
+          # default per-request burn (ms); you can override via /hot?cpu_ms=...
+          - name: CPU_MS
+            value: "10000"
+          # PBKDF2 intensity (used by your app to make CPU work expensive)
+          - name: PBKDF2_ITERS
+            value: "200000"
+          # your watcher settings (unchanged)
+          - name: WATCH_NAMESPACE
+            value: "autoscale"
+          - name: WATCH_SELECTOR
+            value: "app=workload"
         ports:
-        - name: http
-          containerPort: 8080
+          - name: http
+            containerPort: 8080
+        # probes only hit /healthz so they won't interfere with the burn
         readinessProbe:
-          httpGet: { path: /healthz, port: http }
+          httpGet:
+            path: /healthz
+            port: http
           initialDelaySeconds: 5
           periodSeconds: 5
         livenessProbe:
-          httpGet: { path: /healthz, port: http }
+          httpGet:
+            path: /healthz
+            port: http
           initialDelaySeconds: 10
           periodSeconds: 10
         resources:
+          # Small request so it schedules easily. No limits -> can use the whole node.
           requests:
-            cpu: "200m"    # just enough to get scheduled
+            cpu: "200m"
             memory: "128Mi"
-          # No limits → pod can use all CPU and RAM available on the node
+          # IMPORTANT: intentionally no limits to allow full-node CPU consumption.
+          # limits: {}
 ---
 apiVersion: v1
 kind: Service
