@@ -54,7 +54,7 @@ spec:
         image: ghcr.io/cj667113/oci_k8_autoscaling_app:latest
         imagePullPolicy: IfNotPresent
         env:
-        - { name: MAX_INFLIGHT,        value: "1" }        # fast 503s
+        - { name: MAX_INFLIGHT,        value: "16" }        # fast 503s
         - { name: ACQUIRE_TIMEOUT_MS,  value: "0" }
         - { name: CPU_MS,              value: "750" }
         - { name: PBKDF2_ITERS,        value: "200000" }
