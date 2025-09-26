@@ -1,0 +1,7 @@
+{
+  "addonName": "ClusterAutoscaler",
+  "configurations": [
+    { "key": "authType", "value": "instance" },
+    { "key": "nodes",    "value": "1:6:<ID>" }
+  ]
+}
