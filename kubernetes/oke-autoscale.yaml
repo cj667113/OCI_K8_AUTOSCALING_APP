@@ -209,20 +209,22 @@ spec:
   - name: https
     port: 443
     targetPort: 4443
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: metrics-server
   namespace: kube-system
-  labels: { k8s-app: metrics-server }
+  labels:
+    k8s-app: metrics-server
 spec:
   replicas: 1
   selector:
-    matchLabels: { k8s-app: metrics-server }
+    matchLabels:
+      k8s-app: metrics-server
   template:
     metadata:
-      labels: { k8s-app: metrics-server }
+      labels:
+        k8s-app: metrics-server
     spec:
       priorityClassName: system-cluster-critical
       serviceAccountName: metrics-server
@@ -237,26 +239,37 @@ spec:
         args:
         - --cert-dir=/tmp
         - --secure-port=4443
-        - --kubelet-preferred-address-types=InternalIP,Hostname,ExternalIP
-        - --kubelet-use-node-status-port
-        - --metric-resolution=15s
         - --kubelet-insecure-tls
+        - --kubelet-preferred-address-types=InternalIP
+        - --metric-resolution=15s
         ports:
         - name: https
           containerPort: 4443
         livenessProbe:
-          httpGet: { path: /livez, port: https, scheme: HTTPS }
+          httpGet:
+            path: /livez
+            port: https
+            scheme: HTTPS
+            host: 127.0.0.1
           initialDelaySeconds: 20
           periodSeconds: 10
         readinessProbe:
-          httpGet: { path: /readyz, port: https, scheme: HTTPS }
+          httpGet:
+            path: /readyz
+            port: https
+            scheme: HTTPS
+            host: 127.0.0.1
           initialDelaySeconds: 20
           periodSeconds: 10
         securityContext:
           readOnlyRootFilesystem: true
         resources:
-          requests: { cpu: 50m, memory: 60Mi }
-          limits:   { cpu: 200m, memory: 200Mi }
+          requests:
+            cpu: 50m
+            memory: 60Mi
+          limits:
+            cpu: 200m
+            memory: 200Mi
 ---
 apiVersion: apiregistration.k8s.io/v1
 kind: APIService
