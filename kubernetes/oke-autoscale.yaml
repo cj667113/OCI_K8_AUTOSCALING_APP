@@ -54,8 +54,8 @@ spec:
         image: ghcr.io/cj667113/oci_k8_autoscaling_app:latest
         imagePullPolicy: IfNotPresent
         env:
-        - { name: MAX_INFLIGHT,        value: "16" }  # allows 16 concurrent burns -> 503s beyond that
-        - { name: ACQUIRE_TIMEOUT_MS,  value: "0" }   # immediate 503 when saturated
+        - { name: MAX_INFLIGHT,        value: "16" }   # allows 16 concurrent burns -> 503s beyond that
+        - { name: ACQUIRE_TIMEOUT_MS,  value: "0" }    # immediate 503 when saturated
         - { name: CPU_MS,              value: "750" }
         - { name: PBKDF2_ITERS,        value: "200000" }
         - { name: WATCH_NAMESPACE,     value: "autoscale" }
@@ -72,8 +72,10 @@ spec:
           initialDelaySeconds: 10
           periodSeconds: 10
         resources:
-          requests: { cpu: "200m", memory: "128Mi" }
-          #limits:   { cpu: "500m", memory: "512Mi" }
+          requests:
+            cpu: "200m"    # just enough to get scheduled
+            memory: "128Mi"
+          # No limits → pod can use all CPU and RAM available on the node
 ---
 apiVersion: v1
 kind: Service
