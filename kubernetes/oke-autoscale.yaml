@@ -77,7 +77,7 @@ spec:
           periodSeconds: 10
         resources:
           requests: { cpu: "200m", memory: "128Mi" }
-          # no limits -> pod can use full node CPU
+          # Intentionally no limits → can consume full node CPU
 ---
 apiVersion: v1
 kind: Service
@@ -86,12 +86,12 @@ metadata:
   namespace: autoscale
   labels: { app: autoscale-probe }
   annotations:
-    # OKE / OCI Load Balancer
-    oci.oraclecloud.com/load-balancer-type: "lb"                 # L7 LB
-    service.beta.kubernetes.io/oci-load-balancer-internal: "false"
+    # OKE / OCI Load Balancer (modern keys)
+    oci.oraclecloud.com/load-balancer-type: "lb"
+    oci.oraclecloud.com/load-balancer-internal: "false"
     oci.oraclecloud.com/load-balancer-shape: "flexible"
-    oci.oraclecloud.com/load-balancer-shape-flex-min: "10"       # Mbps
-    oci.oraclecloud.com/load-balancer-shape-flex-max: "10"       # Mbps
+    oci.oraclecloud.com/load-balancer-shape-flex-min: "10"   # Mbps
+    oci.oraclecloud.com/load-balancer-shape-flex-max: "10"   # Mbps
 spec:
   type: LoadBalancer
   selector: { app: autoscale-probe }
@@ -134,6 +134,13 @@ spec:
       target:
         type: Utilization
         averageUtilization: 60
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 30
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
 
 # =========================
 # METRICS SERVER (embedded, OKE-friendly & fixed /tmp)
@@ -490,7 +497,7 @@ spec:
         image: grafana/grafana:10.4.5
         env:
         - { name: GF_SECURITY_ADMIN_USER, value: "admin" }
-        - { name: GF_SECURITY_ADMIN_PASSWORD, value: "admin" }
+        - { name: GF_SECURITY_ADMIN_PASSWORD, value: "admin" }   # CHANGE ME
         - { name: GF_PATHS_PROVISIONING, value: /etc/grafana/provisioning }
         ports:
         - name: http
@@ -517,7 +524,7 @@ metadata:
   labels: { app: grafana }
   annotations:
     oci.oraclecloud.com/load-balancer-type: "lb"
-    service.beta.kubernetes.io/oci-load-balancer-internal: "false"
+    oci.oraclecloud.com/load-balancer-internal: "false"
     oci.oraclecloud.com/load-balancer-shape: "flexible"
     oci.oraclecloud.com/load-balancer-shape-flex-min: "10"
     oci.oraclecloud.com/load-balancer-shape-flex-max: "10"
