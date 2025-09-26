@@ -30,7 +30,7 @@ RUN printf 'ServerName localhost\n' >> /etc/apache2/apache2.conf && \
     printf '%s\n' \
     "<VirtualHost *:8080>" \
     "    ServerName localhost" \
-    "    WSGIDaemonProcess app user=www-data group=www-data threads=16 python-home=/opt/venv python-path=/var/www/app" \
+    "    WSGIDaemonProcess app user=www-data group=www-data processes=200 threads=200 python-home=/opt/venv python-path=/var/www/app" \
     "    WSGIProcessGroup app" \
     "    WSGIScriptAlias / /var/www/app/wsgi.py" \
     "    WSGIApplicationGroup %{GLOBAL}" \
