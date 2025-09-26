@@ -54,8 +54,8 @@ spec:
         image: ghcr.io/cj667113/oci_k8_autoscaling_app:latest
         imagePullPolicy: IfNotPresent
         env:
-        - { name: MAX_INFLIGHT,        value: "16" }        # fast 503s
-        - { name: ACQUIRE_TIMEOUT_MS,  value: "0" }
+        - { name: MAX_INFLIGHT,        value: "16" }  # allows 16 concurrent burns -> 503s beyond that
+        - { name: ACQUIRE_TIMEOUT_MS,  value: "0" }   # immediate 503 when saturated
         - { name: CPU_MS,              value: "750" }
         - { name: PBKDF2_ITERS,        value: "200000" }
         - { name: WATCH_NAMESPACE,     value: "autoscale" }
@@ -243,20 +243,14 @@ spec:
         - --requestheader-allowed-names=aggregator
         - --kubelet-insecure-tls
         ports:
-        - containerPort: 4443
-          name: https
+        - name: https
+          containerPort: 4443
         livenessProbe:
-          httpGet:
-            path: /livez
-            port: https
-            scheme: HTTPS
+          httpGet: { path: /livez, port: https, scheme: HTTPS }
           initialDelaySeconds: 20
           periodSeconds: 10
         readinessProbe:
-          httpGet:
-            path: /readyz
-            port: https
-            scheme: HTTPS
+          httpGet: { path: /readyz, port: https, scheme: HTTPS }
           initialDelaySeconds: 20
           periodSeconds: 10
         securityContext:
@@ -278,6 +272,7 @@ spec:
   service:
     name: metrics-server
     namespace: kube-system
+    port: 443
 
 # =========================
 # MONITORING: Prometheus (scrapes autoscale app)
@@ -328,7 +323,6 @@ data:
     global:
       scrape_interval: 15s
       evaluation_interval: 15s
-
     scrape_configs:
     - job_name: 'autoscale-probe'
       kubernetes_sd_configs:
@@ -336,14 +330,9 @@ data:
         namespaces:
           names: ['autoscale']
       relabel_configs:
-      - source_labels: [__meta_kubernetes_service_label_app]
-        action: keep
-        regex: autoscale-probe
-      - source_labels: [__meta_kubernetes_endpoint_port_name]
-        action: keep
-        regex: (metrics|http)
-      - action: labelmap
-        regex: __meta_kubernetes_service_label_(.*)
+      - { action: keep, source_labels: [__meta_kubernetes_service_label_app], regex: autoscale-probe }
+      - { action: keep, source_labels: [__meta_kubernetes_endpoint_port_name], regex: (metrics|http) }
+      - { action: labelmap, regex: __meta_kubernetes_service_label_(.*) }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -371,14 +360,11 @@ spec:
         - name: http
           containerPort: 9090
         volumeMounts:
-        - name: config
-          mountPath: /etc/prometheus
-        - name: data
-          mountPath: /prometheus
+        - { name: config, mountPath: /etc/prometheus }
+        - { name: data,   mountPath: /prometheus }
       volumes:
       - name: config
-        configMap:
-          name: prometheus-config
+        configMap: { name: prometheus-config }
       - name: data
         emptyDir: {}
 ---
