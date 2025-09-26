@@ -580,6 +580,7 @@ spec:
             cpu: 100m
             memory: 300Mi
 ---
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -592,7 +593,7 @@ metadata:
   name: cluster-autoscaler
 rules:
 - apiGroups: [""]
-  resources: ["events", "endpoints", "pods/eviction", "pods/status", "endpoints"]
+  resources: ["events", "endpoints", "pods/eviction", "pods/status"]
   verbs: ["create", "patch", "update", "get", "list", "watch"]
 - apiGroups: [""]
   resources: ["pods", "services", "replicationcontrollers", "persistentvolumeclaims", "persistentvolumes"]
@@ -600,12 +601,18 @@ rules:
 - apiGroups: ["apps"]
   resources: ["replicasets", "statefulsets", "daemonsets"]
   verbs: ["get", "list", "watch"]
-- apiGroups: ["storage.k8s.io"]
-  resources: ["storageclasses", "csinodes", "csidrivers", "csistoragecapacities"]
-  verbs: ["get", "list", "watch"]
 - apiGroups: ["batch"]
   resources: ["jobs", "cronjobs"]
   verbs: ["get", "list", "watch"]
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses", "csinodes", "csidrivers", "csistoragecapacities"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch", "update"]
+- apiGroups: [""]
+  resources: ["nodes/status"]
+  verbs: ["patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
