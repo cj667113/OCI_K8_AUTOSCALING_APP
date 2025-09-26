@@ -1,14 +1,18 @@
 # docker/Dockerfile
-FROM python:3.11-slim
+FROM ubuntu:latest
 
-# Install full build dependencies required by mod-wsgi-httpd (APR + httpd)
+# Prevent tzdata / apt from prompting
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies required by mod-wsgi-httpd (APR + httpd)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-dev \
     gcc g++ make curl wget \
-    libssl-dev libffi-dev libpcre2-dev build-essential ca-certificates \
+    libssl-dev libffi-dev libpcre3-dev build-essential ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python deps + lightweight mod-wsgi-httpd wheel
-RUN pip install --no-cache-dir \
+# Install Python deps + mod-wsgi-httpd
+RUN pip3 install --no-cache-dir \
     flask \
     prometheus_client \
     kubernetes \
