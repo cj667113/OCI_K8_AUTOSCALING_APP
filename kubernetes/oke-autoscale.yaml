@@ -1,5 +1,5 @@
 # =========================
-# AUTOSCALE APP (your block)
+# AUTOSCALE APP (deployment + svc + hpa)
 # =========================
 apiVersion: v1
 kind: Namespace
@@ -51,21 +51,15 @@ spec:
       serviceAccountName: autoscale-probe
       containers:
       - name: app
-        image: ghcr.io/cj667113/oci_k8_autoscaling_app:latest   # <-- make sure this contains the PBKDF2/503 logic
+        image: ghcr.io/cj667113/oci_k8_autoscaling_app:latest
         imagePullPolicy: IfNotPresent
         env:
-        - name: MAX_INFLIGHT
-          value: "1"                    # hard per-process cap => app returns 503 quickly
-        - name: ACQUIRE_TIMEOUT_MS
-          value: "0"                    # don't wait; immediate 503 when cap exceeded
-        - name: CPU_MS
-          value: "750"                  # default CPU burn per request (ms)
-        - name: PBKDF2_ITERS
-          value: "200000"               # CPU intensity of the PBKDF2 loop
-        - name: WATCH_NAMESPACE
-          value: "autoscale"
-        - name: WATCH_SELECTOR
-          value: "app=workload"         # watch your test workload pods
+        - { name: MAX_INFLIGHT,        value: "1" }        # fast 503s
+        - { name: ACQUIRE_TIMEOUT_MS,  value: "0" }
+        - { name: CPU_MS,              value: "750" }
+        - { name: PBKDF2_ITERS,        value: "200000" }
+        - { name: WATCH_NAMESPACE,     value: "autoscale" }
+        - { name: WATCH_SELECTOR,      value: "app=workload" }
         ports:
         - name: http
           containerPort: 8080
@@ -78,8 +72,8 @@ spec:
           initialDelaySeconds: 10
           periodSeconds: 10
         resources:
-          requests: { cpu: "200m", memory: "128Mi" }   # small to saturate quickly
-          limits:   { cpu: "500m", memory: "512Mi" }   # keep low so HPA triggers
+          requests: { cpu: "200m", memory: "128Mi" }
+          limits:   { cpu: "500m", memory: "512Mi" }
 ---
 apiVersion: v1
 kind: Service
@@ -91,8 +85,8 @@ metadata:
     oci.oraclecloud.com/load-balancer-type: "lb"
     service.beta.kubernetes.io/oci-load-balancer-internal: "false"
     service.beta.kubernetes.io/oci-load-balancer-shape: "flexible"
-    service.beta.kubernetes.io/oci-load-balancer-shape-flex-min: "10"
-    service.beta.kubernetes.io/oci-load-balancer-shape-flex-max: "10"
+#    service.beta.kubernetes.io/oci-load-balancer-shape-flex-min: "10"
+#    service.beta.kubernetes.io/oci-load-balancer-shape-flex-max: "10"
 spec:
   type: LoadBalancer
   selector: { app: autoscale-probe }
@@ -113,7 +107,7 @@ spec:
   ports:
   - name: metrics
     port: 9100
-    targetPort: http           # /metrics lives on same port
+    targetPort: http
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -134,25 +128,158 @@ spec:
       target:
         type: Utilization
         averageUtilization: 60
----
-# Note: This ServiceMonitor requires Prometheus Operator. The stack below
-# uses plain Prometheus and will scrape via k8s_sd (so this CRD is optional).
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: autoscale-probe
-  namespace: autoscale
-spec:
-  selector:
-    matchLabels:
-      app: autoscale-probe
-  endpoints:
-  - port: metrics
-    path: /metrics
-    interval: 15s
 
 # =========================
-# MONITORING STACK (Prometheus + Grafana, no Operator)
+# METRICS SERVER (embedded, OKE-friendly flags)
+# =========================
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: metrics-server
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: system:aggregated-metrics-reader
+rules:
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: system:metrics-server
+rules:
+- apiGroups: [""]
+  resources: ["pods","nodes","nodes/stats","namespaces","configmaps"]
+  verbs: ["get","list","watch"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: metrics-server-auth-reader
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+- kind: ServiceAccount
+  name: metrics-server
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: metrics-server:system:auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: metrics-server
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: system:metrics-server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:metrics-server
+subjects:
+- kind: ServiceAccount
+  name: metrics-server
+  namespace: kube-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: metrics-server
+  namespace: kube-system
+  labels: { k8s-app: metrics-server }
+spec:
+  selector: { k8s-app: metrics-server }
+  ports:
+  - name: https
+    port: 443
+    targetPort: 4443
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metrics-server
+  namespace: kube-system
+  labels: { k8s-app: metrics-server }
+spec:
+  selector:
+    matchLabels: { k8s-app: metrics-server }
+  template:
+    metadata:
+      labels: { k8s-app: metrics-server }
+    spec:
+      priorityClassName: system-cluster-critical
+      serviceAccountName: metrics-server
+      tolerations:
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      containers:
+      - name: metrics-server
+        image: registry.k8s.io/metrics-server/metrics-server:v0.7.2
+        imagePullPolicy: IfNotPresent
+        args:
+        - --cert-dir=/tmp
+        - --secure-port=4443
+        - --kubelet-preferred-address-types=InternalIP,Hostname,ExternalIP
+        - --kubelet-use-node-status-port
+        - --metric-resolution=15s
+        - --requestheader-allowed-names=aggregator
+        - --kubelet-insecure-tls     # OKE-friendly
+        ports:
+        - containerPort: 4443
+          name: https
+        livenessProbe:
+          httpGet:
+            path: /livez
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 20
+        securityContext:
+          readOnlyRootFilesystem: true
+        resources:
+          requests: { cpu: 50m, memory: 60Mi }
+          limits: { cpu: 200m, memory: 200Mi }
+---
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1beta1.metrics.k8s.io
+spec:
+  group: metrics.k8s.io
+  version: v1beta1
+  insecureSkipTLSVerify: true
+  groupPriorityMinimum: 100
+  versionPriority: 100
+  service:
+    name: metrics-server
+    namespace: kube-system
+
+# =========================
+# MONITORING: Prometheus (scrapes autoscale app)
 # =========================
 ---
 apiVersion: v1
@@ -202,7 +329,6 @@ data:
       evaluation_interval: 15s
 
     scrape_configs:
-    # Scrape the autoscale app in the autoscale namespace by label + port name
     - job_name: 'autoscale-probe'
       kubernetes_sd_configs:
       - role: endpoints
@@ -217,7 +343,6 @@ data:
         regex: (metrics|http)
       - action: labelmap
         regex: __meta_kubernetes_service_label_(.*)
-
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -238,9 +363,9 @@ spec:
       - name: prometheus
         image: prom/prometheus:v2.54.1
         args:
-          - --config.file=/etc/prometheus/prometheus.yml
-          - --storage.tsdb.path=/prometheus
-          - --web.enable-lifecycle
+        - --config.file=/etc/prometheus/prometheus.yml
+        - --storage.tsdb.path=/prometheus
+        - --web.enable-lifecycle
         ports:
         - name: http
           containerPort: 9090
@@ -270,6 +395,9 @@ spec:
     port: 9090
     targetPort: http
 
+# =========================
+# MONITORING: Grafana (pre-wired to Prometheus)
+# =========================
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -304,37 +432,22 @@ data:
       "version": 1,
       "refresh": "10s",
       "panels": [
-        {
-          "type": "timeseries",
-          "title": "503 errors / sec",
+        { "type": "timeseries", "title": "503 errors / sec",
           "targets": [{ "expr": "sum(rate(loadgen_requests_total{status=\"503\"}[1m]))" }],
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
-        },
-        {
-          "type": "timeseries",
-          "title": "Successful RPS",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 } },
+        { "type": "timeseries", "title": "Successful RPS",
           "targets": [{ "expr": "sum(rate(loadgen_requests_total{status=\"200\"}[1m]))" }],
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
-        },
-        {
-          "type": "timeseries",
-          "title": "Node creation → Ready (seconds)",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 } },
+        { "type": "timeseries", "title": "Node creation → Ready (seconds)",
           "targets": [{ "expr": "k8s_node_ready_seconds" }],
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
-        },
-        {
-          "type": "state-timeline",
-          "title": "Node Ready state",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 } },
+        { "type": "state-timeline", "title": "Node Ready state",
           "targets": [{ "expr": "k8s_node_ready_gauge" }],
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
-        },
-        {
-          "type": "table",
-          "title": "Pod Pending → Running (seconds)",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 } },
+        { "type": "table", "title": "Pod Pending → Running (seconds)",
           "targets": [{ "expr": "k8s_pod_schedule_seconds" }],
           "options": { "showHeader": true },
-          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 }
-        }
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 } }
       ]
     }
 ---
@@ -374,34 +487,25 @@ spec:
       - name: grafana
         image: grafana/grafana:10.4.5
         env:
-        - name: GF_SECURITY_ADMIN_USER
-          value: "admin"
-        - name: GF_SECURITY_ADMIN_PASSWORD
-          value: "admin"     # CHANGE ME
-        - name: GF_PATHS_PROVISIONING
-          value: /etc/grafana/provisioning
+        - { name: GF_SECURITY_ADMIN_USER, value: "admin" }
+        - { name: GF_SECURITY_ADMIN_PASSWORD, value: "admin" }   # CHANGE ME
+        - { name: GF_PATHS_PROVISIONING, value: /etc/grafana/provisioning }
         ports:
         - name: http
           containerPort: 3000
         volumeMounts:
-        - name: datasource
-          mountPath: /etc/grafana/provisioning/datasources
-        - name: dashboards
-          mountPath: /etc/grafana/provisioning/dashboards
-        - name: dashboards-json
-          mountPath: /var/lib/grafana/dashboards
+        - { name: datasource,     mountPath: /etc/grafana/provisioning/datasources }
+        - { name: dashboards,     mountPath: /etc/grafana/provisioning/dashboards }
+        - { name: dashboards-json, mountPath: /var/lib/grafana/dashboards }
       volumes:
       - name: datasource
-        configMap:
-          name: grafana-datasource
+        configMap: { name: grafana-datasource }
       - name: dashboards
         projected:
           sources:
-          - configMap:
-              name: grafana-dash-provider
+          - configMap: { name: grafana-dash-provider }
       - name: dashboards-json
-        configMap:
-          name: grafana-dashboard
+        configMap: { name: grafana-dashboard }
 ---
 apiVersion: v1
 kind: Service
@@ -410,7 +514,7 @@ metadata:
   namespace: monitoring
   labels: { app: grafana }
 spec:
-  type: LoadBalancer          # change to NodePort if preferred
+  type: LoadBalancer
   selector: { app: grafana }
   ports:
   - name: http
