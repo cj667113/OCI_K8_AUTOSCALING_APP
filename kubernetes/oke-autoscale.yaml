@@ -1,0 +1,513 @@
+# =========================
+# AUTOSCALE APP (your block)
+# =========================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: autoscale
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: autoscale-probe
+  namespace: autoscale
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: autoscale-probe
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "pods"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: autoscale-probe
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: autoscale-probe
+subjects:
+- kind: ServiceAccount
+  name: autoscale-probe
+  namespace: autoscale
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autoscale-probe
+  namespace: autoscale
+  labels: { app: autoscale-probe }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: autoscale-probe }
+  template:
+    metadata:
+      labels: { app: autoscale-probe }
+    spec:
+      serviceAccountName: autoscale-probe
+      containers:
+      - name: app
+        image: ghcr.io/cj667113/oci_k8_autoscaling_app:v1.0
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: MAX_INFLIGHT
+          value: "300"                   # concurrent request cap before 503s
+        - name: CPU_MS
+          value: "25"                    # CPU per request (ms)
+        - name: WATCH_NAMESPACE
+          value: "autoscale"
+        - name: WATCH_SELECTOR
+          value: "app=workload"          # watch your test workload pods
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          httpGet: { path: /healthz, port: http }
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          httpGet: { path: /healthz, port: http }
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        resources:
+          requests: { cpu: "100m", memory: "128Mi" }
+          limits:   { cpu: "1000m", memory: "512Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: autoscale-probe-lb
+  namespace: autoscale
+  labels: { app: autoscale-probe }
+  annotations:
+    oci.oraclecloud.com/load-balancer-type: "lb"
+    service.beta.kubernetes.io/oci-load-balancer-internal: "false"
+    service.beta.kubernetes.io/oci-load-balancer-shape: "flexible"
+    service.beta.kubernetes.io/oci-load-balancer-shape-flex-min: "10"
+    service.beta.kubernetes.io/oci-load-balancer-shape-flex-max: "10"
+spec:
+  type: LoadBalancer
+  selector: { app: autoscale-probe }
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: autoscale-probe-metrics
+  namespace: autoscale
+  labels: { app: autoscale-probe }
+spec:
+  type: ClusterIP
+  selector: { app: autoscale-probe }
+  ports:
+  - name: metrics
+    port: 9100
+    targetPort: http           # /metrics lives on same port
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: autoscale-probe-hpa
+  namespace: autoscale
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: autoscale-probe
+  minReplicas: 1
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+---
+# Note: This ServiceMonitor requires Prometheus Operator. The stack below
+# uses plain Prometheus and will scrape via k8s_sd (so this CRD is optional).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: autoscale-probe
+  namespace: autoscale
+spec:
+  selector:
+    matchLabels:
+      app: autoscale-probe
+  endpoints:
+  - port: metrics
+    path: /metrics
+    interval: 15s
+
+# ==========================================
+# CLUSTER AUTOSCALER (explicit --nodes flags)
+# ==========================================
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cluster-autoscaler
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-autoscaler
+rules:
+# core
+- apiGroups: [""]
+  resources: ["events","endpoints","pods","services","nodes","namespaces","persistentvolumes","persistentvolumeclaims","replicationcontrollers"]
+  verbs: ["get","list","watch","patch","update","create"]
+# apps
+- apiGroups: ["apps"]
+  resources: ["deployments","replicasets","statefulsets","daemonsets"]
+  verbs: ["get","list","watch"]
+# coordination for leader election (optional but recommended)
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get","list","watch","create","update","delete"]
+# scale subresource
+- apiGroups: ["apps","extensions"]
+  resources: ["deployments/scale","replicasets/scale","statefulsets/scale"]
+  verbs: ["get","update"]
+# node status
+- apiGroups: [""]
+  resources: ["nodes/status"]
+  verbs: ["patch","update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-autoscaler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-autoscaler
+subjects:
+- kind: ServiceAccount
+  name: cluster-autoscaler
+  namespace: kube-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-autoscaler
+  namespace: kube-system
+  labels: { app: cluster-autoscaler }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: cluster-autoscaler }
+  template:
+    metadata:
+      labels: { app: cluster-autoscaler }
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+    spec:
+      serviceAccountName: cluster-autoscaler
+      priorityClassName: system-cluster-critical
+      tolerations:
+      - key: "CriticalAddonsOnly"
+        operator: "Exists"
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      containers:
+      - name: cluster-autoscaler
+        # NOTE: change iad.ocir.io to your region's OCIR if needed
+        image: iad.ocir.io/oracle/oci-cluster-autoscaler:1.32.0-1
+        imagePullPolicy: IfNotPresent
+        command:
+        - ./cluster-autoscaler
+        - --cloud-provider=oci-oke
+        # >>> Set your per-node-pool min:max:nodepoolOCID here
+        - --nodes=1:6:ocid1.nodepool.oc1.iad.<your_pool_ocid_A>
+        - --nodes=0:4:ocid1.nodepool.oc1.iad.<your_pool_ocid_B>
+        # Recommended flags
+        - --balance-similar-node-groups
+        - --expander=least-waste
+        - --skip-nodes-with-system-pods=false
+        - --skip-nodes-with-local-storage=false
+        - --stderrthreshold=info
+        - --v=4
+        resources:
+          limits:
+            cpu: 200m
+            memory: 600Mi
+          requests:
+            cpu: 100m
+            memory: 300Mi
+
+# =========================
+# MONITORING STACK (Prometheus + Grafana, no Operator)
+# =========================
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+- apiGroups: [""]
+  resources: ["nodes","nodes/metrics","services","endpoints","pods","namespaces"]
+  verbs: ["get","list","watch"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    scrape_configs:
+    # Scrape the autoscale app in the autoscale namespace by label + port name
+    - job_name: 'autoscale-probe'
+      kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names: ['autoscale']
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_label_app]
+        action: keep
+        regex: autoscale-probe
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: (metrics|http)
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.*)
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels: { app: prometheus }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: prometheus }
+  template:
+    metadata:
+      labels: { app: prometheus }
+    spec:
+      serviceAccountName: prometheus
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.54.1
+        args:
+          - --config.file=/etc/prometheus/prometheus.yml
+          - --storage.tsdb.path=/prometheus
+          - --web.enable-lifecycle
+        ports:
+        - name: http
+          containerPort: 9090
+        volumeMounts:
+        - name: config
+          mountPath: /etc/prometheus
+        - name: data
+          mountPath: /prometheus
+      volumes:
+      - name: config
+        configMap:
+          name: prometheus-config
+      - name: data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels: { app: prometheus }
+spec:
+  type: ClusterIP
+  selector: { app: prometheus }
+  ports:
+  - name: http
+    port: 9090
+    targetPort: http
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource
+  namespace: monitoring
+  labels:
+    grafana_datasource: "1"
+data:
+  prometheus.yaml: |
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      access: proxy
+      url: http://prometheus.monitoring.svc.cluster.local:9090
+      isDefault: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  oke-autoscale.json: |
+    {
+      "title": "OKE Autoscale: 503s & Readiness",
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "version": 1,
+      "refresh": "10s",
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "503 errors / sec",
+          "targets": [{ "expr": "sum(rate(loadgen_requests_total{status=\"503\"}[1m]))" }],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+        },
+        {
+          "type": "timeseries",
+          "title": "Successful RPS",
+          "targets": [{ "expr": "sum(rate(loadgen_requests_total{status=\"200\"}[1m]))" }],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+        },
+        {
+          "type": "timeseries",
+          "title": "Node creation → Ready (seconds)",
+          "targets": [{ "expr": "k8s_node_ready_seconds" }],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+        },
+        {
+          "type": "state-timeline",
+          "title": "Node Ready state",
+          "targets": [{ "expr": "k8s_node_ready_gauge" }],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+        },
+        {
+          "type": "table",
+          "title": "Pod Pending → Running (seconds)",
+          "targets": [{ "expr": "k8s_pod_schedule_seconds" }],
+          "options": { "showHeader": true },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 }
+        }
+      ]
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dash-provider
+  namespace: monitoring
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+    - name: 'default'
+      orgId: 1
+      folder: ''
+      type: file
+      disableDeletion: false
+      editable: true
+      options:
+        path: /var/lib/grafana/dashboards
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels: { app: grafana }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: grafana }
+  template:
+    metadata:
+      labels: { app: grafana }
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:10.4.5
+        env:
+        - name: GF_SECURITY_ADMIN_USER
+          value: "admin"
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "admin"     # CHANGE ME
+        - name: GF_PATHS_PROVISIONING
+          value: /etc/grafana/provisioning
+        ports:
+        - name: http
+          containerPort: 3000
+        volumeMounts:
+        - name: datasource
+          mountPath: /etc/grafana/provisioning/datasources
+        - name: dashboards
+          mountPath: /etc/grafana/provisioning/dashboards
+        - name: dashboards-json
+          mountPath: /var/lib/grafana/dashboards
+      volumes:
+      - name: datasource
+        configMap:
+          name: grafana-datasource
+      - name: dashboards
+        projected:
+          sources:
+          - configMap:
+              name: grafana-dash-provider
+      - name: dashboards-json
+        configMap:
+          name: grafana-dashboard
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels: { app: grafana }
+spec:
+  type: LoadBalancer          # change to NodePort if preferred
+  selector: { app: grafana }
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
