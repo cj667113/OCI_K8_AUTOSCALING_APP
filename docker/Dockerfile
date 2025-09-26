@@ -24,7 +24,9 @@ COPY flask/ /var/www/app/
 
 # Apache site pointing to your WSGI app, using the venv
 # Also ensure Apache listens on port 8080
-RUN printf 'ServerName localhost\nListen 8080\n' >> /etc/apache2/ports.conf && \
+RUN printf 'ServerName localhost\n' >> /etc/apache2/apache2.conf && \
+    printf 'Listen 8080\n' >> /etc/apache2/ports.conf && \
+    a2enmod wsgi && \
     printf '%s\n' \
     "<VirtualHost *:8080>" \
     "    ServerName localhost" \
@@ -32,8 +34,6 @@ RUN printf 'ServerName localhost\nListen 8080\n' >> /etc/apache2/ports.conf && \
     "    WSGIProcessGroup app" \
     "    WSGIScriptAlias / /var/www/app/wsgi.py" \
     "    WSGIApplicationGroup %{GLOBAL}" \
-    "    WSGIScriptReloading On" \
-    "    WSGIPrintErrors On" \
     "    <Directory /var/www/app>" \
     "        Require all granted" \
     "    </Directory>" \
@@ -42,8 +42,7 @@ RUN printf 'ServerName localhost\nListen 8080\n' >> /etc/apache2/ports.conf && \
     "</VirtualHost>" \
     > /etc/apache2/sites-available/app.conf && \
     a2dissite 000-default.conf && \
-    a2ensite app.conf && \
-    echo 'ServerName localhost' >> /etc/apache2/apache2.conf
+    a2ensite app.conf
 
 EXPOSE 8080
 CMD ["apache2ctl", "-D", "FOREGROUND"]
