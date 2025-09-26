@@ -128,7 +128,7 @@ spec:
         averageUtilization: 60
 
 # =========================
-# METRICS SERVER (embedded, OKE-friendly flags)
+# METRICS SERVER (embedded, OKE-friendly & fixed /tmp)
 # =========================
 ---
 apiVersion: v1
@@ -197,7 +197,7 @@ subjects:
   name: metrics-server
   namespace: kube-system
 ---
-# Service that exposes port 443 -> container 4443
+# Service exposing 443 -> container 4443
 apiVersion: v1
 kind: Service
 metadata:
@@ -220,7 +220,7 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: Recreate           # ensure only one pod; avoids old pod sticking around
+    type: Recreate
   selector:
     matchLabels: { k8s-app: metrics-server }
   template:
@@ -233,6 +233,9 @@ spec:
       - key: "node-role.kubernetes.io/control-plane"
         operator: "Exists"
         effect: "NoSchedule"
+      volumes:
+      - name: tmp-dir              # <-- writable /tmp for self-signed certs
+        emptyDir: {}
       containers:
       - name: metrics-server
         image: registry.k8s.io/metrics-server/metrics-server:v0.7.2
@@ -247,6 +250,9 @@ spec:
         ports:
         - name: https
           containerPort: 4443
+        volumeMounts:
+        - name: tmp-dir
+          mountPath: /tmp
         livenessProbe:
           httpGet: { path: /livez, port: https, scheme: HTTPS }
           initialDelaySeconds: 20
@@ -261,7 +267,7 @@ spec:
           requests: { cpu: 50m, memory: 60Mi }
           limits:   { cpu: 200m, memory: 200Mi }
 ---
-# APIService points to Service on port 443
+# APIService points to Service on 443
 apiVersion: apiregistration.k8s.io/v1
 kind: APIService
 metadata:
