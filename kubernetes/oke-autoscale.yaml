@@ -547,15 +547,27 @@ metadata:
   name: cluster-autoscaler
   namespace: kube-system
 spec:
+  selector:
+    matchLabels:
+      app: cluster-autoscaler
   template:
+    metadata:
+      labels:
+        app: cluster-autoscaler
     spec:
+      serviceAccountName: cluster-autoscaler
       containers:
       - name: cluster-autoscaler
+        image: k8s.gcr.io/autoscaling/cluster-autoscaler:v1.29.0
+        command:
+        - ./cluster-autoscaler
         args:
         - --cloud-provider=oci
-        - --nodes=1:10:ocid1.nodepool.oc1.iad.aaaaaaaacjbbd4zmpporghuk7booijr6qaojqqtknhzyy4goancqg2cz37iq
+        # Replace this with your real OKE node pool OCID
+        - --nodes=1:6:ocid1.nodepool.oc1.iad.ocid1.nodepool.oc1.iad.aaaaaaaacjbbd4zmpporghuk7booijr6qaojqqtknhzyy4goancqg2cz37iq
         - --balance-similar-node-groups=true
         - --skip-nodes-with-system-pods=false
+        - --expander=least-waste
         - --scale-down-enabled=true
         - --scan-interval=10s
         - --scale-down-delay-after-add=2m
@@ -563,3 +575,7 @@ spec:
         - --scale-down-delay-after-delete=10s
         - --scale-down-delay-after-failure=30s
         - --max-empty-bulk-delete=10
+        resources:
+          requests:
+            cpu: 100m
+            memory: 300Mi
