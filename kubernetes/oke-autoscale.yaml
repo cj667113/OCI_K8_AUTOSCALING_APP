@@ -240,7 +240,6 @@ spec:
         - --kubelet-preferred-address-types=InternalIP,Hostname,ExternalIP
         - --kubelet-use-node-status-port
         - --metric-resolution=15s
-        - --requestheader-allowed-names=aggregator
         - --kubelet-insecure-tls
         ports:
         - name: https
