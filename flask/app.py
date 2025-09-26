@@ -57,9 +57,9 @@ _gate = threading.BoundedSemaphore(MAX_INFLIGHT)
 
 def _busy_ms(ms: int):
     end = time.time() + (ms / 1000.0)
-    x = 0.0
+    payload = os.urandom(64)
     while time.time() < end:
-        x += math.sqrt(12345.6789)
+        hashlib.pbkdf2_hmac('sha256', payload, b'salt', 200_000)
 
 # -------------------------
 # Flask app
