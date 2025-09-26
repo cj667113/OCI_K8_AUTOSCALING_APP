@@ -580,7 +580,6 @@ spec:
             cpu: 100m
             memory: 300Mi
 ---
----
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -613,6 +612,9 @@ rules:
 - apiGroups: [""]
   resources: ["nodes/status"]
   verbs: ["patch"]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "list", "watch", "create", "update", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
