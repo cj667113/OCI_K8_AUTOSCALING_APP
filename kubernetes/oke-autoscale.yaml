@@ -541,7 +541,6 @@ spec:
 # This manifest *patches* the existing OKE add-on Deployment in-place.
 # Apply as-is (recommended with server-side apply) and replace <NODEPOOL_OCID>.
 # =========================
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -553,18 +552,13 @@ spec:
       annotations:
         cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
     spec:
-      priorityClassName: system-cluster-critical
       serviceAccountName: cluster-autoscaler
-      tolerations:
-      - key: "node-role.kubernetes.io/control-plane"
-        operator: "Exists"
-        effect: "NoSchedule"
       containers:
       - name: cluster-autoscaler
-        # DO NOT set image/command so we don't override the OKE-managed add-on.
+        # Don’t set image/command, only override args/resources
         args:
         - --cloud-provider=oci
-        - --nodes=1:6:ocid1.nodepool.oc1.iad.aaaaaaaacjbbd4zmpporghuk7booijr6qaojqqtknhzyy4goancqg2cz37iq        # replace with your nodepool OCID
+        - --nodes=1:6:ocid1.nodepool.oc1.iad.aaaaaaaacjbbd4zmpporghuk7booijr6qaojqqtknhzyy4goancqg2cz37iq
         - --balance-similar-node-groups=true
         - --skip-nodes-with-system-pods=false
         - --expander=least-waste
