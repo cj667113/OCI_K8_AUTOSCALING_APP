@@ -564,7 +564,7 @@ spec:
         # DO NOT set image/command so we don't override the OKE-managed add-on.
         args:
         - --cloud-provider=oci
-        - --nodes=1:6:<NODEPOOL_OCID>         # replace with your nodepool OCID
+        - --nodes=1:6:ocid1.nodepool.oc1.iad.aaaaaaaacjbbd4zmpporghuk7booijr6qaojqqtknhzyy4goancqg2cz37iq        # replace with your nodepool OCID
         - --balance-similar-node-groups=true
         - --skip-nodes-with-system-pods=false
         - --expander=least-waste
