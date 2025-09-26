@@ -1,10 +1,11 @@
 # docker/Dockerfile
 FROM python:3.11-slim
 
-# Install minimal build dependencies
+# Install full build dependencies required by mod-wsgi-httpd (APR + httpd)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc libssl-dev ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+    gcc g++ make curl wget \
+    libssl-dev libffi-dev libpcre3-dev build-essential ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Python deps + lightweight mod-wsgi-httpd wheel
 RUN pip install --no-cache-dir \
