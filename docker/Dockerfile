@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir flask prometheus_client kubernetes mod_wsgi
 
 # Copy the Flask app folder
 WORKDIR /app
-COPY flask/ /app/
+COPY ../flask/ /app/
 
 # Single-process so Prometheus metrics don’t need multiprocess mode
 ENV MOD_WSGI_PROCESSES=1 \
