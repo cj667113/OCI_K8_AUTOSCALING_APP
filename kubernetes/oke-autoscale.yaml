@@ -51,7 +51,6 @@ spec:
       labels:
         app: autoscale-probe
     spec:
-      # faster shutdown between tests
       terminationGracePeriodSeconds: 5
       serviceAccountName: autoscale-probe
       containers:
@@ -59,46 +58,28 @@ spec:
         image: ghcr.io/cj667113/oci_k8_autoscaling_app:latest
         imagePullPolicy: IfNotPresent
         env:
-          # allow far more concurrent burns than cores so the app isn't the bottleneck
-          - name: MAX_INFLIGHT
-            value: "64"
-          # return 503 immediately when all worker slots are busy
-          - name: ACQUIRE_TIMEOUT_MS
-            value: "0"
-          # default per-request burn (ms); you can override via /hot?cpu_ms=...
-          - name: CPU_MS
-            value: "10000"
-          # PBKDF2 intensity (used by your app to make CPU work expensive)
-          - name: PBKDF2_ITERS
-            value: "200000"
-          # your watcher settings (unchanged)
-          - name: WATCH_NAMESPACE
-            value: "autoscale"
-          - name: WATCH_SELECTOR
-            value: "app=workload"
+        - { name: MAX_INFLIGHT,        value: "64" }
+        - { name: ACQUIRE_TIMEOUT_MS,  value: "0" }
+        - { name: CPU_MS,              value: "10000" }
+        - { name: PBKDF2_ITERS,        value: "200000" }
+        - { name: WATCH_NAMESPACE,     value: "autoscale" }
+        - { name: WATCH_SELECTOR,      value: "app=workload" }
         ports:
-          - name: http
-            containerPort: 8080
-        # probes only hit /healthz so they won't interfere with the burn
+        - name: http
+          containerPort: 8080
         readinessProbe:
-          httpGet:
-            path: /healthz
-            port: http
+          httpGet: { path: /healthz, port: http }
           initialDelaySeconds: 5
           periodSeconds: 5
         livenessProbe:
-          httpGet:
-            path: /healthz
-            port: http
+          httpGet: { path: /healthz, port: http }
           initialDelaySeconds: 10
           periodSeconds: 10
         resources:
-          # Small request so it schedules easily. No limits -> can use the whole node.
           requests:
             cpu: "200m"
             memory: "128Mi"
-          # IMPORTANT: intentionally no limits to allow full-node CPU consumption.
-          # limits: {}
+          # no limits -> can consume full node CPU
 ---
 apiVersion: v1
 kind: Service
@@ -115,7 +96,7 @@ spec:
   selector: { app: autoscale-probe }
   ports:
   - name: http
-    port: 80
+    port: 80            # Public listener for the app
     targetPort: http
 ---
 apiVersion: v1
@@ -222,7 +203,6 @@ subjects:
   name: metrics-server
   namespace: kube-system
 ---
-# Service exposing 443 -> container 4443
 apiVersion: v1
 kind: Service
 metadata:
@@ -259,7 +239,7 @@ spec:
         operator: "Exists"
         effect: "NoSchedule"
       volumes:
-      - name: tmp-dir              # <-- writable /tmp for self-signed certs
+      - name: tmp-dir
         emptyDir: {}
       containers:
       - name: metrics-server
@@ -292,7 +272,6 @@ spec:
           requests: { cpu: 50m, memory: 60Mi }
           limits:   { cpu: 200m, memory: 200Mi }
 ---
-# APIService points to Service on 443
 apiVersion: apiregistration.k8s.io/v1
 kind: APIService
 metadata:
@@ -417,7 +396,7 @@ spec:
     targetPort: http
 
 # =========================
-# MONITORING: Grafana (pre-wired to Prometheus)
+# MONITORING: Grafana (pre-wired to Prometheus; LB on :3000 to avoid port 80 clash)
 # =========================
 ---
 apiVersion: v1
@@ -509,7 +488,7 @@ spec:
         image: grafana/grafana:10.4.5
         env:
         - { name: GF_SECURITY_ADMIN_USER, value: "admin" }
-        - { name: GF_SECURITY_ADMIN_PASSWORD, value: "admin" }   # CHANGE ME
+        - { name: GF_SECURITY_ADMIN_PASSWORD, value: "admin" }
         - { name: GF_PATHS_PROVISIONING, value: /etc/grafana/provisioning }
         ports:
         - name: http
@@ -534,10 +513,14 @@ metadata:
   name: grafana
   namespace: monitoring
   labels: { app: grafana }
+  annotations:
+    oci.oraclecloud.com/load-balancer-type: "lb"
+    service.beta.kubernetes.io/oci-load-balancer-internal: "false"
+    service.beta.kubernetes.io/oci-load-balancer-shape: "flexible"
 spec:
   type: LoadBalancer
   selector: { app: grafana }
   ports:
   - name: http
-    port: 80
+    port: 3000          # Public listener for Grafana (no conflict with app :80)
     targetPort: http
