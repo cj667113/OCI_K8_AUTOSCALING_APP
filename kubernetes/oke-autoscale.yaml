@@ -51,7 +51,7 @@ spec:
       serviceAccountName: autoscale-probe
       containers:
       - name: app
-        image: ghcr.io/cj667113/oci_k8_autoscaling_app:v1.0   # <-- make sure this contains the PBKDF2/503 logic
+        image: ghcr.io/cj667113/oci_k8_autoscaling_app:latest   # <-- make sure this contains the PBKDF2/503 logic
         imagePullPolicy: IfNotPresent
         env:
         - name: MAX_INFLIGHT
