@@ -196,22 +196,33 @@ subjects:
 - kind: ServiceAccount
   name: metrics-server
   namespace: kube-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: metrics-server
+  namespace: kube-system
+  labels: { k8s-app: metrics-server }
+spec:
+  selector: { k8s-app: metrics-server }
+  ports:
+  - name: https
+    port: 443
+    targetPort: 4443
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: metrics-server
   namespace: kube-system
-  labels:
-    k8s-app: metrics-server
+  labels: { k8s-app: metrics-server }
 spec:
   replicas: 1
   selector:
-    matchLabels:
-      k8s-app: metrics-server
+    matchLabels: { k8s-app: metrics-server }
   template:
     metadata:
-      labels:
-        k8s-app: metrics-server
+      labels: { k8s-app: metrics-server }
     spec:
       priorityClassName: system-cluster-critical
       serviceAccountName: metrics-server
@@ -219,6 +230,9 @@ spec:
       - key: "node-role.kubernetes.io/control-plane"
         operator: "Exists"
         effect: "NoSchedule"
+      volumes:
+      - name: tmp-dir
+        emptyDir: {}
       containers:
       - name: metrics-server
         image: registry.k8s.io/metrics-server/metrics-server:v0.7.2
@@ -227,35 +241,27 @@ spec:
         - --cert-dir=/tmp
         - --secure-port=4443
         - --kubelet-insecure-tls
-        - --kubelet-preferred-address-types=InternalIP
+        - --kubelet-preferred-address-types=InternalIP,Hostname,ExternalIP
         - --metric-resolution=15s
         ports:
         - name: https
           containerPort: 4443
         livenessProbe:
-          httpGet:
-            path: /livez
-            port: 4443
-            scheme: HTTPS
+          httpGet: { path: /livez,  port: https, scheme: HTTPS }
           initialDelaySeconds: 20
           periodSeconds: 10
         readinessProbe:
-          httpGet:
-            path: /readyz
-            port: 4443
-            scheme: HTTPS
+          httpGet: { path: /readyz, port: https, scheme: HTTPS }
           initialDelaySeconds: 20
           periodSeconds: 10
+        volumeMounts:
+        - name: tmp-dir
+          mountPath: /tmp
         securityContext:
           readOnlyRootFilesystem: true
         resources:
-          requests:
-            cpu: 50m
-            memory: 60Mi
-          limits:
-            cpu: 200m
-            memory: 200Mi
-
+          requests: { cpu: 50m, memory: 60Mi }
+          limits:   { cpu: 200m, memory: 200Mi }
 ---
 apiVersion: apiregistration.k8s.io/v1
 kind: APIService
@@ -270,7 +276,7 @@ spec:
   service:
     name: metrics-server
     namespace: kube-system
-    port: 443
+    # (defaults to 443)
 
 # =========================
 # MONITORING: Prometheus (scrapes autoscale app)
