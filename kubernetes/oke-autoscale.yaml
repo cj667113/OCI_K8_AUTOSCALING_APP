@@ -56,7 +56,7 @@ spec:
       containers:
       - name: app
         image: ghcr.io/cj667113/oci_k8_autoscaling_app:latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         env:
         - { name: MAX_INFLIGHT,        value: "64" }
         - { name: ACQUIRE_TIMEOUT_MS,  value: "0" }
