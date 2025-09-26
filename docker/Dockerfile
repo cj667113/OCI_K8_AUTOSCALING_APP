@@ -1,16 +1,21 @@
 # docker/Dockerfile
 FROM python:3.11-slim
 
+# Install minimal build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libssl-dev ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-# Python deps for the app + Apache via mod_wsgi-express
-RUN pip install --no-cache-dir flask prometheus_client kubernetes mod_wsgi
+# Install Python deps + lightweight mod-wsgi-httpd wheel
+RUN pip install --no-cache-dir \
+    flask \
+    prometheus_client \
+    kubernetes \
+    mod-wsgi-httpd
 
-# Copy the Flask app folder
+# Copy the Flask app folder (assumes build context is repo root)
 WORKDIR /app
-COPY ../flask/ /app/
+COPY flask/ /app/
 
 # Single-process so Prometheus metrics don’t need multiprocess mode
 ENV MOD_WSGI_PROCESSES=1 \
