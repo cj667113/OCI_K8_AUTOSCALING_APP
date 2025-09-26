@@ -564,7 +564,7 @@ spec:
         args:
         - --cloud-provider=oci
         # Replace this with your real OKE node pool OCID
-        - --nodes=1:6:ocid1.nodepool.oc1.iad.ocid1.nodepool.oc1.iad.aaaaaaaacjbbd4zmpporghuk7booijr6qaojqqtknhzyy4goancqg2cz37iq
+        - --nodes=1:6:ocid1.nodepool.oc1.iad.aaaaaaaacjbbd4zmpporghuk7booijr6qaojqqtknhzyy4goancqg2cz37iq
         - --balance-similar-node-groups=true
         - --skip-nodes-with-system-pods=false
         - --expander=least-waste
