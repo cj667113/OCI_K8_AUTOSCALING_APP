@@ -1,4 +1,5 @@
-import os, time, math, threading, sys
+# app.py
+import os, time, math, threading, sys, hashlib
 from datetime import datetime, timezone
 from flask import Flask, Response, request
 from prometheus_client import (
@@ -17,38 +18,32 @@ except Exception as e:
 # -------------------------
 # Config (env vars)
 # -------------------------
-MAX_INFLIGHT = int(os.getenv("MAX_INFLIGHT", "200"))   # concurrent cap before returning 503
-CPU_MS       = int(os.getenv("CPU_MS", "20"))          # busy CPU time per request (ms)
-WATCH_NS     = os.getenv("WATCH_NAMESPACE", "default")
-WATCH_SEL    = os.getenv("WATCH_SELECTOR",  "app=stress-app")
-ENABLE_K8S   = os.getenv("ENABLE_K8S_WATCHERS", "1") == "1"
+MAX_INFLIGHT       = int(os.getenv("MAX_INFLIGHT", "200"))    # per-process cap before returning 503
+ACQUIRE_TIMEOUT_MS = int(os.getenv("ACQUIRE_TIMEOUT_MS", "0"))# 0=immediate 503; >0=wait then 503
+CPU_MS             = int(os.getenv("CPU_MS", "20"))           # default CPU burn per request (ms)
+PBKDF2_ITERS       = int(os.getenv("PBKDF2_ITERS", "200000")) # CPU intensity for PBKDF2
+WATCH_NS           = os.getenv("WATCH_NAMESPACE", "default")
+WATCH_SEL          = os.getenv("WATCH_SELECTOR",  "app=stress-app")
+ENABLE_K8S         = os.getenv("ENABLE_K8S_WATCHERS", "1") == "1"
 
 # -------------------------
 # Prometheus metrics
 # -------------------------
 REG = CollectorRegistry()
-REQ_COUNTER = Counter(
-    "loadgen_requests_total", "Total /hot requests by status",
-    ["status"], registry=REG
-)
-REQ_HIST = Histogram(
-    "loadgen_request_duration_seconds",
-    "Duration of /hot requests (seconds)", registry=REG
-)
-NODE_READY_SECONDS = Gauge(
-    "k8s_node_ready_seconds",
-    "Seconds from Node creationTimestamp to first Ready=True",
-    ["node"], registry=REG
-)
-NODE_READY_GAUGE = Gauge(
-    "k8s_node_ready_gauge", "Node Ready flag (1=Ready, 0=NotReady)",
-    ["node"], registry=REG
-)
-POD_SCHEDULE_SECONDS = Gauge(
-    "k8s_pod_schedule_seconds",
-    "Seconds from Pod Pending to first Running",
-    ["pod","node"], registry=REG
-)
+REQ_COUNTER = Counter("loadgen_requests_total", "Total /hot requests by status",
+                      ["status"], registry=REG)
+REQ_HIST    = Histogram("loadgen_request_duration_seconds",
+                        "Duration of /hot requests (seconds)", registry=REG)
+NODE_READY_SECONDS = Gauge("k8s_node_ready_seconds",
+                           "Seconds from Node creationTimestamp to first Ready=True",
+                           ["node"], registry=REG)
+NODE_READY_GAUGE   = Gauge("k8s_node_ready_gauge",
+                           "Node Ready flag (1=Ready, 0=NotReady)",
+                           ["node"], registry=REG)
+POD_SCHEDULE_SECONDS = Gauge("k8s_pod_schedule_seconds",
+                             "Seconds from Pod Pending to first Running",
+                             ["pod","node"], registry=REG)
+INFLIGHT = Gauge("loadgen_inflight", "In-flight requests (per-process)", registry=REG)
 
 # -------------------------
 # Concurrency gate and CPU burn
@@ -56,10 +51,11 @@ POD_SCHEDULE_SECONDS = Gauge(
 _gate = threading.BoundedSemaphore(MAX_INFLIGHT)
 
 def _busy_ms(ms: int):
+    """Burn CPU for ~ms using PBKDF2 (C code releases GIL, scales across threads)."""
     end = time.time() + (ms / 1000.0)
-    payload = os.urandom(64)
+    payload = b"x" * 64
     while time.time() < end:
-        hashlib.pbkdf2_hmac('sha256', payload, b'salt', 200_000)
+        hashlib.pbkdf2_hmac("sha256", payload, b"salt", PBKDF2_ITERS)
 
 # -------------------------
 # Flask app
@@ -70,21 +66,31 @@ application = app  # for mod_wsgi
 @app.get("/hot")
 def hot():
     start = time.time()
-    if not _gate.acquire(blocking=False):
+
+    # how long to burn per request
+    try:
+        ms = max(0, int(request.args.get("cpu_ms", CPU_MS)))
+    except Exception:
+        ms = CPU_MS
+
+    # admission control: generate 503s *from the app*
+    if ACQUIRE_TIMEOUT_MS <= 0:
+        acquired = _gate.acquire(blocking=False)  # instant 503 if busy
+    else:
+        acquired = _gate.acquire(timeout=ACQUIRE_TIMEOUT_MS / 1000.0)
+
+    if not acquired:
         REQ_COUNTER.labels(status="503").inc()
         return ("busy\n", 503)
+
+    INFLIGHT.inc()
     try:
-        ms = CPU_MS
-        if "cpu_ms" in request.args:
-            try:
-                ms = max(0, int(request.args["cpu_ms"]))
-            except Exception:
-                pass
         _busy_ms(ms)
         REQ_HIST.observe(time.time() - start)
         REQ_COUNTER.labels(status="200").inc()
         return "ok\n", 200
     finally:
+        INFLIGHT.dec()
         _gate.release()
 
 @app.get("/metrics")
@@ -97,7 +103,7 @@ def healthz():
 
 @app.get("/")
 def root():
-    return "autoscale-probe: endpoints: /hot?cpu_ms=20, /metrics, /healthz\n", 200
+    return "autoscale-probe: endpoints: /hot?cpu_ms=NN, /metrics, /healthz\n", 200
 
 # -------------------------
 # Kubernetes watchers (optional)
