@@ -86,7 +86,6 @@ metadata:
   namespace: autoscale
   labels: { app: autoscale-probe }
   annotations:
-    # OKE / OCI Load Balancer (modern keys)
     oci.oraclecloud.com/load-balancer-type: "lb"
     oci.oraclecloud.com/load-balancer-internal: "false"
     oci.oraclecloud.com/load-balancer-shape: "flexible"
@@ -536,3 +535,31 @@ spec:
   - name: http
     port: 3000
     targetPort: http
+
+# =========================
+# OKE ADDON: Patch default Cluster Autoscaler args (no image change)
+# Requires the OKE autoscaler addon to already exist in kube-system.
+# =========================
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-autoscaler
+  namespace: kube-system
+spec:
+  template:
+    spec:
+      containers:
+      - name: cluster-autoscaler
+        args:
+        - --cloud-provider=oci
+        - --nodes=1:10:ocid1.nodepool.oc1.iad.aaaaaaaacjbbd4zmpporghuk7booijr6qaojqqtknhzyy4goancqg2cz37iq
+        - --balance-similar-node-groups=true
+        - --skip-nodes-with-system-pods=false
+        - --scale-down-enabled=true
+        - --scan-interval=10s
+        - --scale-down-delay-after-add=2m
+        - --scale-down-unneeded-time=3m
+        - --scale-down-delay-after-delete=10s
+        - --scale-down-delay-after-failure=30s
+        - --max-empty-bulk-delete=10
