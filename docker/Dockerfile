@@ -3,29 +3,32 @@ FROM ubuntu:latest
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install Python + Apache + mod_wsgi + system build deps
+# System deps: Python, virtualenv, Apache, mod_wsgi
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip python3-dev \
+    python3 python3-venv python3-pip \
     apache2 libapache2-mod-wsgi-py3 \
-    gcc g++ make curl wget \
-    libssl-dev libffi-dev build-essential ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates curl && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install Python-only dependencies via pip
-RUN pip3 install --no-cache-dir \
-    flask \
-    prometheus_client \
-    kubernetes
+# Create a virtualenv for app deps (avoids PEP 668 "externally-managed" error)
+RUN python3 -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    /opt/venv/bin/pip install --no-cache-dir \
+        flask \
+        prometheus_client \
+        kubernetes
 
-# Copy your app into /var/www/app
+# Copy your Flask app (must contain app.py and wsgi.py exporting "application")
 WORKDIR /var/www/app
 COPY flask/ /var/www/app/
 
-# Apache site config for mod_wsgi
-RUN printf '%s\n' \
+# Apache site pointing to your WSGI app, using the venv
+# Also ensure Apache listens on port 8080
+RUN printf 'Listen 8080\n' >> /etc/apache2/ports.conf && \
+    printf '%s\n' \
     "<VirtualHost *:8080>" \
     "    ServerName localhost" \
-    "    WSGIDaemonProcess app threads=16 python-path=/var/www/app" \
+    "    WSGIDaemonProcess app threads=16 python-home=/opt/venv python-path=/var/www/app" \
     "    WSGIScriptAlias / /var/www/app/wsgi.py" \
     "    <Directory /var/www/app>" \
     "        Require all granted" \
@@ -33,11 +36,9 @@ RUN printf '%s\n' \
     "    ErrorLog /dev/stderr" \
     "    CustomLog /dev/stdout combined" \
     "</VirtualHost>" \
-    > /etc/apache2/sites-available/app.conf \
-    && a2dissite 000-default.conf \
-    && a2ensite app.conf
+    > /etc/apache2/sites-available/app.conf && \
+    a2dissite 000-default.conf && \
+    a2ensite app.conf
 
 EXPOSE 8080
-
-# Run apache in foreground
 CMD ["apache2ctl", "-D", "FOREGROUND"]
