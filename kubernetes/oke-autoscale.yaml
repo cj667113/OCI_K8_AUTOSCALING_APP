@@ -86,11 +86,10 @@ metadata:
   namespace: autoscale
   labels: { app: autoscale-probe }
   annotations:
-    oci.oraclecloud.com/load-balancer-type: "lb"
+    oci.oraclecloud.com/load-balancer-type: "nlb"
+    oci.oraclecloud.com/nlb-subnet1: "ocid1.subnet.oc1.iad.aaaaaaaapluertttyvs4bgg4pfng7fwouebyn27uaexcnq4hjcqdetbh64da"
     oci.oraclecloud.com/load-balancer-internal: "false"
     oci.oraclecloud.com/load-balancer-shape: "flexible"
-    oci.oraclecloud.com/load-balancer-shape-flex-min: "10"   # Mbps
-    oci.oraclecloud.com/load-balancer-shape-flex-max: "10"   # Mbps
 spec:
   type: LoadBalancer
   selector: { app: autoscale-probe }
@@ -522,18 +521,17 @@ metadata:
   namespace: monitoring
   labels: { app: grafana }
   annotations:
-    oci.oraclecloud.com/load-balancer-type: "lb"
+    oci.oraclecloud.com/load-balancer-type: "nlb"
+    oci.oraclecloud.com/nlb-subnet1: "ocid1.subnet.oc1.iad.aaaaaaaapluertttyvs4bgg4pfng7fwouebyn27uaexcnq4hjcqdetbh64da"
     oci.oraclecloud.com/load-balancer-internal: "false"
     oci.oraclecloud.com/load-balancer-shape: "flexible"
-    oci.oraclecloud.com/load-balancer-shape-flex-min: "10"
-    oci.oraclecloud.com/load-balancer-shape-flex-max: "10"
 spec:
   type: LoadBalancer
   selector: { app: grafana }
   externalTrafficPolicy: Cluster
   ports:
   - name: http
-    port: 3000
+    port: 80
     targetPort: http
 ---
 apiVersion: v1
