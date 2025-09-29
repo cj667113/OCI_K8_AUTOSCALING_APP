@@ -24,9 +24,9 @@ except Exception as e:
 
 # ---------- Metrics (custom registry)
 REG = CollectorRegistry()
-ProcessCollector(registry=REG)
-PlatformCollector(registry=REG)
-GCCollector(registry=REG)
+ProcessCollector(registry=REG)   # process_cpu_seconds_total, process_resident_memory_bytes, ...
+PlatformCollector(registry=REG)  # python_info
+GCCollector(registry=REG)        # python_gc_* totals
 
 # Only “what was actually served”
 REQS_SERVED = Counter(
@@ -34,39 +34,33 @@ REQS_SERVED = Counter(
     "Number of /hot requests completed successfully (HTTP 200).",
     registry=REG,
 )
-
 REQ_HIST = Histogram(
     "loadgen_request_duration_seconds",
     "Duration of /hot requests (seconds).",
     registry=REG,
 )
-
 INFLIGHT = Gauge(
     "loadgen_inflight",
     "In-flight /hot requests (per-process).",
     registry=REG,
 )
-
 CPU_MS_USED = Histogram(
     "loadgen_cpu_ms",
     "Requested CPU burn time (ms) per request.",
     buckets=(1, 5, 10, 20, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 20000, 60000),
     registry=REG,
 )
-
 PARALLEL_USED = Histogram(
     "loadgen_parallel",
     "Requested worker threads per /hot.",
     buckets=(1, 2, 4, 8, 16, 32, 64, 128, 256),
     registry=REG,
 )
-
 THREADS_CURRENT = Gauge(
     "loadgen_threads_current",
     "Python threading.active_count().",
     registry=REG,
 )
-
 CFG_GAUGE = Gauge("loadgen_config", "Runtime config values.", ["key"], registry=REG)
 CFG_GAUGE.labels(key="max_inflight").set(MAX_INFLIGHT)
 CFG_GAUGE.labels(key="default_cpu_ms").set(CPU_MS)
@@ -158,7 +152,7 @@ def root():
         200,
     )
 
-# ---------- K8s node watcher (optional)
+# ---------- K8s node watcher (optional, with delete & reconcile to avoid ghost nodes)
 def _node_is_ready(n):
     for cond in (n.status.conditions or []):
         if cond.type == "Ready":
@@ -186,48 +180,96 @@ def _parse_quantity_bytes(q: str) -> int:
             return int(float(s[:-len(u)]) * m)
     return int(float(s))
 
+_NODES_LOCK = threading.Lock()
+KNOWN_NODES = set()
+
+def _remove_node_series(name: str):
+    """Delete all node-labelled time series for a node."""
+    for g in (
+        NODE_READY_SECONDS, NODE_READY_GAUGE, NODE_UNSCHEDULABLE,
+        NODE_CAP_CPU_CORES, NODE_ALLOC_CPU_CORES,
+        NODE_CAP_MEM_BYTES, NODE_ALLOC_MEM_BYTES,
+    ):
+        try:
+            g.remove(name)  # labels=["node"]
+        except KeyError:
+            pass
+    with _NODES_LOCK:
+        KNOWN_NODES.discard(name)
+    print(f"[autoscale-probe] removed metrics for node {name}", file=sys.stderr)
+
+def _export_node(n):
+    """Set gauges for a node object and mark it as known."""
+    name = n.metadata.name
+    NODE_READY_GAUGE.labels(node=name).set(1 if _node_is_ready(n) else 0)
+    NODE_UNSCHEDULABLE.labels(node=name).set(1 if bool(getattr(n.spec, "unschedulable", False)) else 0)
+    rt = _node_ready_transition(n)
+    if rt:
+        d = (rt - n.metadata.creation_timestamp).total_seconds()
+        if d > 0:
+            NODE_READY_SECONDS.labels(node=name).set(d)
+    cap = n.status.capacity or {}
+    alloc = n.status.allocatable or {}
+    NODE_CAP_CPU_CORES.labels(node=name).set(_parse_quantity_cpu(cap.get("cpu")))
+    NODE_ALLOC_CPU_CORES.labels(node=name).set(_parse_quantity_cpu(alloc.get("cpu")))
+    NODE_CAP_MEM_BYTES.labels(node=name).set(_parse_quantity_bytes(cap.get("memory")))
+    NODE_ALLOC_MEM_BYTES.labels(node=name).set(_parse_quantity_bytes(alloc.get("memory")))
+    with _NODES_LOCK:
+        KNOWN_NODES.add(name)
+
 def watch_nodes():
-    try:
-        config.load_incluster_config()
-        print("[autoscale-probe] using in-cluster config", file=sys.stderr)
-    except Exception:
-        config.load_kube_config()
-        print("[autoscale-probe] using local kubeconfig", file=sys.stderr)
+    while True:
+        try:
+            try:
+                config.load_incluster_config()
+                print("[autoscale-probe] using in-cluster config", file=sys.stderr)
+            except Exception:
+                config.load_kube_config()
+                print("[autoscale-probe] using local kubeconfig", file=sys.stderr)
 
-    v1 = client.CoreV1Api()
-    w = watch.Watch()
+            v1 = client.CoreV1Api()
+            w = watch.Watch()
 
-    # prime
-    for n in v1.list_node().items:
-        name = n.metadata.name
-        NODE_READY_GAUGE.labels(node=name).set(1 if _node_is_ready(n) else 0)
-        NODE_UNSCHEDULABLE.labels(node=name).set(1 if bool(getattr(n.spec, "unschedulable", False)) else 0)
-        cap, alloc = n.status.capacity or {}, n.status.allocatable or {}
-        NODE_CAP_CPU_CORES.labels(node=name).set(_parse_quantity_cpu(cap.get("cpu")))
-        NODE_ALLOC_CPU_CORES.labels(node=name).set(_parse_quantity_cpu(alloc.get("cpu")))
-        NODE_CAP_MEM_BYTES.labels(node=name).set(_parse_quantity_bytes(cap.get("memory")))
-        NODE_ALLOC_MEM_BYTES.labels(node=name).set(_parse_quantity_bytes(alloc.get("memory")))
-        rt = _node_ready_transition(n)
-        if rt:
-            d = (rt - n.metadata.creation_timestamp).total_seconds()
-            if d > 0:
-                NODE_READY_SECONDS.labels(node=name).set(d)
+            # Prime from current list
+            current = {n.metadata.name: n for n in v1.list_node().items}
+            for n in current.values():
+                _export_node(n)
 
-    # stream updates
-    for ev in w.stream(v1.list_node, _request_timeout=300):
-        n = ev["object"]; name = n.metadata.name
-        NODE_READY_GAUGE.labels(node=name).set(1 if _node_is_ready(n) else 0)
-        NODE_UNSCHEDULABLE.labels(node=name).set(1 if bool(getattr(n.spec, "unschedulable", False)) else 0)
-        cap, alloc = n.status.capacity or {}, n.status.allocatable or {}
-        NODE_CAP_CPU_CORES.labels(node=name).set(_parse_quantity_cpu(cap.get("cpu")))
-        NODE_ALLOC_CPU_CORES.labels(node=name).set(_parse_quantity_cpu(alloc.get("cpu")))
-        NODE_CAP_MEM_BYTES.labels(node=name).set(_parse_quantity_bytes(cap.get("memory")))
-        NODE_ALLOC_MEM_BYTES.labels(node=name).set(_parse_quantity_bytes(alloc.get("memory")))
-        rt = _node_ready_transition(n)
-        if rt:
-            d = (rt - n.metadata.creation_timestamp).total_seconds()
-            if d > 0:
-                NODE_READY_SECONDS.labels(node=name).set(d)
+            # Remove any stale label sets from previous runs
+            with _NODES_LOCK:
+                stale = KNOWN_NODES.difference(current.keys())
+            for name in list(stale):
+                _remove_node_series(name)
+
+            last_reconcile = time.time()
+
+            # Stream updates
+            for ev in w.stream(v1.list_node, _request_timeout=300):
+                et = ev.get("type")
+                n = ev.get("object")
+                if not n or not getattr(n, "metadata", None):
+                    continue
+                name = n.metadata.name
+
+                if et == "DELETED":
+                    _remove_node_series(name)
+                    continue
+
+                # ADDED / MODIFIED / BOOKMARK
+                _export_node(n)
+
+                # Periodic reconcile in case we missed deletes
+                if time.time() - last_reconcile > 60:
+                    listed = {nn.metadata.name for nn in v1.list_node().items}
+                    with _NODES_LOCK:
+                        stale_now = KNOWN_NODES.difference(listed)
+                    for s in list(stale_now):
+                        _remove_node_series(s)
+                    last_reconcile = time.time()
+
+        except Exception as e:
+            print(f"[autoscale-probe] watch_nodes error: {e}", file=sys.stderr)
+            time.sleep(2)
 
 def _start_watchers_once():
     if not HAS_K8S:
