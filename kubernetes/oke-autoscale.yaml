@@ -436,7 +436,7 @@ data:
       "title": "OKE Autoscale: Served RPS, Latency, CPU & Memory",
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 3,
+      "version": 4,
       "refresh": "10s",
       "panels": [
         {
@@ -510,11 +510,12 @@ data:
           ],
           "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 }
         },
+
         {
           "type": "state-timeline",
           "title": "Node Ready state",
           "targets": [
-            { "expr": "k8s_node_ready_gauge", "legendFormat": "{{node}}" }
+            { "expr": "max by (node) (k8s_node_ready_gauge{job=\"autoscale-probe\"})", "legendFormat": "{{node}}" }
           ],
           "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 }
         },
@@ -523,8 +524,8 @@ data:
           "type": "timeseries",
           "title": "Node CPU capacity vs allocatable (cores)",
           "targets": [
-            { "expr": "k8s_node_capacity_cpu_cores", "legendFormat": "capacity {{node}}" },
-            { "expr": "k8s_node_allocatable_cpu_cores", "legendFormat": "alloc {{node}}" }
+            { "expr": "max by (node) (k8s_node_capacity_cpu_cores{job=\"autoscale-probe\"})", "legendFormat": "capacity {{node}}" },
+            { "expr": "max by (node) (k8s_node_allocatable_cpu_cores{job=\"autoscale-probe\"})", "legendFormat": "alloc {{node}}" }
           ],
           "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 }
         },
@@ -532,16 +533,16 @@ data:
           "type": "timeseries",
           "title": "Node Memory capacity vs allocatable (GiB)",
           "targets": [
-            { "expr": "k8s_node_capacity_memory_bytes / 1024 / 1024 / 1024", "legendFormat": "capacity {{node}}" },
-            { "expr": "k8s_node_allocatable_memory_bytes / 1024 / 1024 / 1024", "legendFormat": "alloc {{node}}" }
+            { "expr": "max by (node) (k8s_node_capacity_memory_bytes{job=\"autoscale-probe\"}) / 1024 / 1024 / 1024", "legendFormat": "capacity {{node}}" },
+            { "expr": "max by (node) (k8s_node_allocatable_memory_bytes{job=\"autoscale-probe\"}) / 1024 / 1024 / 1024", "legendFormat": "alloc {{node}}" }
           ],
           "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 }
         },
         {
-          "type": "state-timeline",
-          "title": "Node Unschedulable",
+          "type": "timeseries",
+          "title": "Node creation → Ready (seconds)",
           "targets": [
-            { "expr": "k8s_node_unschedulable", "legendFormat": "{{node}}" }
+            { "expr": "max by (node) (k8s_node_ready_seconds{job=\"autoscale-probe\"})", "legendFormat": "{{node}}" }
           ],
           "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 }
         }
