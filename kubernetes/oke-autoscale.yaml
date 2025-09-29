@@ -437,7 +437,7 @@ data:
       "title": "OKE Autoscale: CPU & Memory",
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 7,
+      "version": 8,
       "refresh": "10s",
       "panels": [
         {
@@ -499,6 +499,23 @@ data:
           "targets": [
             { "expr": "max by (node) (k8s_node_ready_gauge{job=\"autoscale-probe\"})", "legendFormat": "{{node}}" }
           ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": { "text": "NotReady", "color": "red" },
+                    "1": { "text": "Ready",    "color": "green" }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" }
+          },
           "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 }
         }
       ]
