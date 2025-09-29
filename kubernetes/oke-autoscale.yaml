@@ -403,7 +403,7 @@ spec:
     targetPort: http
 
 # =========================
-# MONITORING: Grafana (LB on :3000 — no conflict with app :80)
+# MONITORING: Grafana
 # =========================
 ---
 apiVersion: v1
@@ -433,28 +433,118 @@ metadata:
 data:
   oke-autoscale.json: |
     {
-      "title": "OKE Autoscale: 503s & Readiness",
+      "title": "OKE Autoscale: CPU & Memory",
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 1,
+      "version": 2,
       "refresh": "10s",
       "panels": [
-        { "type": "timeseries", "title": "503 errors / sec",
-          "targets": [{ "expr": "sum(rate(loadgen_requests_total{status=\"503\"}[1m]))" }],
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 } },
-        { "type": "timeseries", "title": "Successful RPS",
-          "targets": [{ "expr": "sum(rate(loadgen_requests_total{status=\"200\"}[1m]))" }],
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 } },
-        { "type": "timeseries", "title": "Node creation → Ready (seconds)",
-          "targets": [{ "expr": "k8s_node_ready_seconds" }],
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 } },
-        { "type": "state-timeline", "title": "Node Ready state",
-          "targets": [{ "expr": "k8s_node_ready_gauge" }],
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 } },
-        { "type": "table", "title": "Pod Pending → Running (seconds)",
-          "targets": [{ "expr": "k8s_pod_schedule_seconds" }],
+        {
+          "type": "timeseries",
+          "title": "App CPU (cores)",
+          "targets": [
+            { "expr": "sum(rate(process_cpu_seconds_total{job=\"autoscale-probe\"}[1m])) by (instance)", "legendFormat": "{{instance}}" }
+          ],
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 }
+        },
+        {
+          "type": "timeseries",
+          "title": "App CPU (% of 1 core)",
+          "targets": [
+            { "expr": "100 * sum(rate(process_cpu_seconds_total{job=\"autoscale-probe\"}[1m])) by (instance)", "legendFormat": "{{instance}}" }
+          ],
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 }
+        },
+        {
+          "type": "timeseries",
+          "title": "App RSS (MiB)",
+          "targets": [
+            { "expr": "process_resident_memory_bytes{job=\"autoscale-probe\"} / 1024 / 1024", "legendFormat": "{{instance}}" }
+          ],
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 }
+        },
+
+        {
+          "type": "timeseries",
+          "title": "Inflight & Threads",
+          "targets": [
+            { "expr": "loadgen_inflight{job=\"autoscale-probe\"}", "legendFormat": "inflight {{instance}}" },
+            { "expr": "loadgen_threads_current{job=\"autoscale-probe\"}", "legendFormat": "threads {{instance}}" }
+          ],
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 }
+        },
+        {
+          "type": "timeseries",
+          "title": "RPS (200 vs 503)",
+          "targets": [
+            { "expr": "sum(rate(loadgen_requests_total{job=\"autoscale-probe\",status=\"200\"}[1m]))", "legendFormat": "200 OK" },
+            { "expr": "sum(rate(loadgen_requests_total{job=\"autoscale-probe\",status=\"503\"}[1m]))", "legendFormat": "503 Busy" }
+          ],
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 }
+        },
+        {
+          "type": "timeseries",
+          "title": "Requested cpu_ms (p50/p90)",
+          "targets": [
+            { "expr": "histogram_quantile(0.5, sum(rate(loadgen_cpu_ms_bucket{job=\"autoscale-probe\"}[5m])) by (le))", "legendFormat": "p50" },
+            { "expr": "histogram_quantile(0.9, sum(rate(loadgen_cpu_ms_bucket{job=\"autoscale-probe\"}[5m])) by (le))", "legendFormat": "p90" }
+          ],
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 }
+        },
+
+        {
+          "type": "timeseries",
+          "title": "Requested parallel (p50/p90)",
+          "targets": [
+            { "expr": "histogram_quantile(0.5, sum(rate(loadgen_parallel_bucket{job=\"autoscale-probe\"}[5m])) by (le))", "legendFormat": "p50" },
+            { "expr": "histogram_quantile(0.9, sum(rate(loadgen_parallel_bucket{job=\"autoscale-probe\"}[5m])) by (le))", "legendFormat": "p90" }
+          ],
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 }
+        },
+        {
+          "type": "state-timeline",
+          "title": "Node Ready state",
+          "targets": [
+            { "expr": "k8s_node_ready_gauge", "legendFormat": "{{node}}" }
+          ],
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 }
+        },
+        {
+          "type": "timeseries",
+          "title": "Node CPU capacity vs allocatable (cores)",
+          "targets": [
+            { "expr": "k8s_node_capacity_cpu_cores", "legendFormat": "capacity {{node}}" },
+            { "expr": "k8s_node_allocatable_cpu_cores", "legendFormat": "alloc {{node}}" }
+          ],
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 }
+        },
+
+        {
+          "type": "timeseries",
+          "title": "Node Memory capacity vs allocatable (GiB)",
+          "targets": [
+            { "expr": "k8s_node_capacity_memory_bytes / 1024 / 1024 / 1024", "legendFormat": "capacity {{node}}" },
+            { "expr": "k8s_node_allocatable_memory_bytes / 1024 / 1024 / 1024", "legendFormat": "alloc {{node}}" }
+          ],
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 }
+        },
+        {
+          "type": "state-timeline",
+          "title": "Node Unschedulable",
+          "targets": [
+            { "expr": "k8s_node_unschedulable", "legendFormat": "{{node}}" }
+          ],
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 }
+        },
+        {
+          "type": "table",
+          "title": "Pod Pending → Running (seconds)",
+          "targets": [
+            { "expr": "k8s_pod_schedule_seconds", "legendFormat": "{{pod}}@{{node}}" }
+          ],
           "options": { "showHeader": true },
-          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 } }
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 }
+        }
       ]
     }
 ---
@@ -495,7 +585,7 @@ spec:
         image: grafana/grafana:10.4.5
         env:
         - { name: GF_SECURITY_ADMIN_USER, value: "admin" }
-        - { name: GF_SECURITY_ADMIN_PASSWORD, value: "admin" }   # CHANGE ME
+        - { name: GF_SECURITY_ADMIN_PASSWORD, value: "admin" }
         - { name: GF_PATHS_PROVISIONING, value: /etc/grafana/provisioning }
         ports:
         - name: http
