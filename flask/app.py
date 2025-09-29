@@ -2,7 +2,7 @@
 import os, time, threading, sys, hashlib
 from flask import Flask, Response, request
 from prometheus_client import (
-    CollectorRegistry, Counter, Histogram, Gauge,
+    CollectorRegistry, Counter, Gauge,
     generate_latest, CONTENT_TYPE_LATEST,
     ProcessCollector, PlatformCollector, GCCollector,
 )
@@ -34,26 +34,9 @@ REQS_SERVED = Counter(
     "Number of /hot requests completed successfully (HTTP 200).",
     registry=REG,
 )
-REQ_HIST = Histogram(
-    "loadgen_request_duration_seconds",
-    "Duration of /hot requests (seconds).",
-    registry=REG,
-)
 INFLIGHT = Gauge(
     "loadgen_inflight",
     "In-flight /hot requests (per-process).",
-    registry=REG,
-)
-CPU_MS_USED = Histogram(
-    "loadgen_cpu_ms",
-    "Requested CPU burn time (ms) per request.",
-    buckets=(1, 5, 10, 20, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 20000, 60000),
-    registry=REG,
-)
-PARALLEL_USED = Histogram(
-    "loadgen_parallel",
-    "Requested worker threads per /hot.",
-    buckets=(1, 2, 4, 8, 16, 32, 64, 128, 256),
     registry=REG,
 )
 THREADS_CURRENT = Gauge(
@@ -100,22 +83,16 @@ application = app  # mod_wsgi compatibility
 
 @app.get("/hot")
 def hot():
-    start = time.time()
-
-    # per-request burn
+    # per-request burn settings (still honored, just not exported as histograms)
     try:
         ms = max(0, int(request.args.get("cpu_ms", CPU_MS)))
     except Exception:
         ms = CPU_MS
-    CPU_MS_USED.observe(ms)
-
-    # fan out across threads
     try:
         parallel = int(request.args.get("parallel", "1"))
     except Exception:
         parallel = 1
     parallel = max(1, min(parallel, (os.cpu_count() or 1) * 8))
-    PARALLEL_USED.observe(parallel)
 
     # Always block until a slot is free (no 503 path at all)
     _gate.acquire()
@@ -126,7 +103,6 @@ def hot():
             _busy_ms(ms)
         else:
             _burn_parallel(ms, parallel)
-        REQ_HIST.observe(time.time() - start)
         REQS_SERVED.inc()
         return "ok\n", 200
     finally:
