@@ -433,10 +433,10 @@ metadata:
 data:
   oke-autoscale.json: |
     {
-      "title": "OKE Autoscale: CPU & Memory",
+      "title": "OKE Autoscale: Served RPS, Latency, CPU & Memory",
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 2,
+      "version": 3,
       "refresh": "10s",
       "panels": [
         {
@@ -475,31 +475,40 @@ data:
         },
         {
           "type": "timeseries",
-          "title": "RPS (200 vs 503)",
+          "title": "Served RPS",
           "targets": [
-            { "expr": "sum(rate(loadgen_requests_total{job=\"autoscale-probe\",status=\"200\"}[1m]))", "legendFormat": "200 OK" },
-            { "expr": "sum(rate(loadgen_requests_total{job=\"autoscale-probe\",status=\"503\"}[1m]))", "legendFormat": "503 Busy" }
+            { "expr": "sum(rate(loadgen_requests_served_total{job=\"autoscale-probe\"}[1m]))", "legendFormat": "cluster" },
+            { "expr": "sum(rate(loadgen_requests_served_total{job=\"autoscale-probe\"}[1m])) by (instance)", "legendFormat": "{{instance}}" }
           ],
           "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 }
         },
         {
           "type": "timeseries",
-          "title": "Requested cpu_ms (p50/p90)",
+          "title": "Latency (p50 / p95)",
           "targets": [
-            { "expr": "histogram_quantile(0.5, sum(rate(loadgen_cpu_ms_bucket{job=\"autoscale-probe\"}[5m])) by (le))", "legendFormat": "p50" },
-            { "expr": "histogram_quantile(0.9, sum(rate(loadgen_cpu_ms_bucket{job=\"autoscale-probe\"}[5m])) by (le))", "legendFormat": "p90" }
+            { "expr": "histogram_quantile(0.5, sum(rate(loadgen_request_duration_seconds_bucket{job=\"autoscale-probe\"}[5m])) by (le))", "legendFormat": "p50" },
+            { "expr": "histogram_quantile(0.95, sum(rate(loadgen_request_duration_seconds_bucket{job=\"autoscale-probe\"}[5m])) by (le))", "legendFormat": "p95" }
           ],
           "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 }
         },
 
         {
           "type": "timeseries",
-          "title": "Requested parallel (p50/p90)",
+          "title": "Requested cpu_ms (p50 / p90)",
+          "targets": [
+            { "expr": "histogram_quantile(0.5, sum(rate(loadgen_cpu_ms_bucket{job=\"autoscale-probe\"}[5m])) by (le))", "legendFormat": "p50" },
+            { "expr": "histogram_quantile(0.9, sum(rate(loadgen_cpu_ms_bucket{job=\"autoscale-probe\"}[5m])) by (le))", "legendFormat": "p90" }
+          ],
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 }
+        },
+        {
+          "type": "timeseries",
+          "title": "Requested parallel (p50 / p90)",
           "targets": [
             { "expr": "histogram_quantile(0.5, sum(rate(loadgen_parallel_bucket{job=\"autoscale-probe\"}[5m])) by (le))", "legendFormat": "p50" },
             { "expr": "histogram_quantile(0.9, sum(rate(loadgen_parallel_bucket{job=\"autoscale-probe\"}[5m])) by (le))", "legendFormat": "p90" }
           ],
-          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 }
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 }
         },
         {
           "type": "state-timeline",
@@ -507,8 +516,9 @@ data:
           "targets": [
             { "expr": "k8s_node_ready_gauge", "legendFormat": "{{node}}" }
           ],
-          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 }
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 }
         },
+
         {
           "type": "timeseries",
           "title": "Node CPU capacity vs allocatable (cores)",
@@ -516,9 +526,8 @@ data:
             { "expr": "k8s_node_capacity_cpu_cores", "legendFormat": "capacity {{node}}" },
             { "expr": "k8s_node_allocatable_cpu_cores", "legendFormat": "alloc {{node}}" }
           ],
-          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 }
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 }
         },
-
         {
           "type": "timeseries",
           "title": "Node Memory capacity vs allocatable (GiB)",
@@ -526,7 +535,7 @@ data:
             { "expr": "k8s_node_capacity_memory_bytes / 1024 / 1024 / 1024", "legendFormat": "capacity {{node}}" },
             { "expr": "k8s_node_allocatable_memory_bytes / 1024 / 1024 / 1024", "legendFormat": "alloc {{node}}" }
           ],
-          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 }
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 }
         },
         {
           "type": "state-timeline",
@@ -534,15 +543,6 @@ data:
           "targets": [
             { "expr": "k8s_node_unschedulable", "legendFormat": "{{node}}" }
           ],
-          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 }
-        },
-        {
-          "type": "table",
-          "title": "Pod Pending → Running (seconds)",
-          "targets": [
-            { "expr": "k8s_pod_schedule_seconds", "legendFormat": "{{pod}}@{{node}}" }
-          ],
-          "options": { "showHeader": true },
           "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 }
         }
       ]
