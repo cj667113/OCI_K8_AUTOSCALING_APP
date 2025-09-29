@@ -434,10 +434,10 @@ metadata:
 data:
   oke-autoscale.json: |
     {
-      "title": "OKE Autoscale: Served RPS, CPU & Memory",
+      "title": "OKE Autoscale: CPU & Memory",
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 6,
+      "version": 7,
       "refresh": "10s",
       "panels": [
         {
@@ -467,29 +467,11 @@ data:
 
         {
           "type": "timeseries",
-          "title": "Inflight & Threads",
-          "targets": [
-            { "expr": "loadgen_inflight{job=\"autoscale-probe\"}", "legendFormat": "inflight {{instance}}" },
-            { "expr": "loadgen_threads_current{job=\"autoscale-probe\"}", "legendFormat": "threads {{instance}}" }
-          ],
-          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 }
-        },
-        {
-          "type": "timeseries",
-          "title": "Served RPS",
-          "targets": [
-            { "expr": "sum(rate(loadgen_requests_served_total{job=\"autoscale-probe\"}[1m]))", "legendFormat": "cluster" },
-            { "expr": "sum(rate(loadgen_requests_served_total{job=\"autoscale-probe\"}[1m])) by (instance)", "legendFormat": "{{instance}}" }
-          ],
-          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 }
-        },
-        {
-          "type": "timeseries",
           "title": "Ready nodes (count)",
           "targets": [
             { "expr": "sum( max by (node) (k8s_node_ready_gauge{job=\"autoscale-probe\"}) )", "legendFormat": "ready" }
           ],
-          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 }
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 }
         },
 
         {
@@ -512,10 +494,10 @@ data:
         },
 
         {
-          "type": "timeseries",
-          "title": "Node creation → Ready (seconds) (per-node)",
+          "type": "state-timeline",
+          "title": "Node Ready state (per-node)",
           "targets": [
-            { "expr": "max by (node) (k8s_node_ready_seconds{job=\"autoscale-probe\"})", "legendFormat": "{{node}}" }
+            { "expr": "max by (node) (k8s_node_ready_gauge{job=\"autoscale-probe\"})", "legendFormat": "{{node}}" }
           ],
           "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 }
         }
@@ -577,7 +559,6 @@ spec:
           - configMap: { name: grafana-dash-provider }
       - name: dashboards-json
         configMap: { name: grafana-dashboard }
-
 ---
 apiVersion: v1
 kind: Service
