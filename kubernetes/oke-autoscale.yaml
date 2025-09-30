@@ -597,7 +597,7 @@ metadata:
     oci.oraclecloud.com/load-balancer-shape: "flexible"
     oci.oraclecloud.com/load-balancer-shape-flex-min: "10"   # Mbps
     oci.oraclecloud.com/load-balancer-shape-flex-max: "10"   # Mbps
-    oci-load-balancer.oraclecloud.com/health-check: '{"protocol":"HTTP","port":3000,"urlPath":"/","returnCode":200,"retries":2,"timeoutInMillis":5000}'
+    oci-load-balancer.oraclecloud.com/health-check: '{"protocol":"TCP","port":3000,"retries":2,"timeoutInMillis":5000}'
     service.beta.kubernetes.io/oci-load-balancer-security-list-management-mode: "None" #Needed for Use Pod IPs
 spec:
   type: LoadBalancer
