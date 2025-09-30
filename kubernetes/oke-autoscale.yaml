@@ -100,7 +100,7 @@ spec:
   type: LoadBalancer
   allocateLoadBalancerNodePorts: false #Use Pod IPs
   selector: { app: autoscale-probe }
-  externalTrafficPolicy: Cluster
+  #externalTrafficPolicy: Cluster
   ports:
   - name: http
     port: 80
