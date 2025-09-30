@@ -77,11 +77,11 @@ spec:
           periodSeconds: 10
         resources:
           requests:
-            cpu: "1"
-            memory: "1Gi"
+            cpu: "2"
+            memory: "2Gi"
           limits:
-            cpu: "1"
-            memory: "1Gi"
+            cpu: "3"
+            memory: "4Gi"
 
 ---
 apiVersion: v1
