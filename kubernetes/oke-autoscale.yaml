@@ -96,8 +96,6 @@ metadata:
     oci.oraclecloud.com/load-balancer-shape: "flexible"
     oci.oraclecloud.com/load-balancer-shape-flex-min: "10"   # Mbps
     oci.oraclecloud.com/load-balancer-shape-flex-max: "10"   # Mbps
-    oci.oraclecloud.com/load-balancer-name: "OCI_K8_AUTOSCALING_APP-LB"
-
 spec:
   type: LoadBalancer
   selector: { app: autoscale-probe }
@@ -596,7 +594,6 @@ metadata:
     oci.oraclecloud.com/load-balancer-shape: "flexible"
     oci.oraclecloud.com/load-balancer-shape-flex-min: "10"   # Mbps
     oci.oraclecloud.com/load-balancer-shape-flex-max: "10"   # Mbps
-    oci.oraclecloud.com/load-balancer-name: "OCI_K8_AUTOSCALING_APP-GRAFANA-LB"
 spec:
   type: LoadBalancer
   selector: { app: grafana }
