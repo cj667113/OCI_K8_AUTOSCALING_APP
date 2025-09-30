@@ -96,11 +96,12 @@ metadata:
     oci.oraclecloud.com/load-balancer-shape: "flexible"
     oci.oraclecloud.com/load-balancer-shape-flex-min: "10"   # Mbps
     oci.oraclecloud.com/load-balancer-shape-flex-max: "10"   # Mbps
+    service.beta.kubernetes.io/oci-load-balancer-security-list-management-mode: "None" #Needed for Use Pod IPs
 spec:
   type: LoadBalancer
   allocateLoadBalancerNodePorts: false #Use Pod IPs
   selector: { app: autoscale-probe }
-  #externalTrafficPolicy: Cluster
+  externalTrafficPolicy: Cluster
   ports:
   - name: http
     port: 80
@@ -595,6 +596,7 @@ metadata:
     oci.oraclecloud.com/load-balancer-shape: "flexible"
     oci.oraclecloud.com/load-balancer-shape-flex-min: "10"   # Mbps
     oci.oraclecloud.com/load-balancer-shape-flex-max: "10"   # Mbps
+    service.beta.kubernetes.io/oci-load-balancer-security-list-management-mode: "None" #Needed for Use Pod IPs
 spec:
   type: LoadBalancer
   allocateLoadBalancerNodePorts: false #Use Pod IPS
