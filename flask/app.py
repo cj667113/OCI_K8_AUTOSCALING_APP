@@ -2,16 +2,15 @@
 import os, time, threading, sys, hashlib
 from flask import Flask, Response, request
 from prometheus_client import (
-    CollectorRegistry, Counter, Gauge,
+    CollectorRegistry, Gauge,
     generate_latest, CONTENT_TYPE_LATEST,
     ProcessCollector, PlatformCollector, GCCollector,
 )
 
 # ---------- Config (env vars)
-MAX_INFLIGHT = int(os.getenv("MAX_INFLIGHT", "200"))     # max concurrent /hot handlers
+MAX_INFLIGHT = int(os.getenv("MAX_INFLIGHT", "200"))     # cap concurrent /hot handlers
 CPU_MS       = int(os.getenv("CPU_MS", "20"))            # default burn per request (ms)
-PBKDF2_ITERS = int(os.getenv("PBKDF2_ITERS", "200000"))  # CPU intensity
-WATCH_NS     = os.getenv("WATCH_NAMESPACE", "default")
+PBKDF2_ITERS = int(os.getenv("PBKDF2_ITERS", "200000"))  # PBKDF2 iterations
 ENABLE_K8S   = os.getenv("ENABLE_K8S_WATCHERS", "1") == "1"
 
 # ---------- Optional Kubernetes client
@@ -28,37 +27,14 @@ ProcessCollector(registry=REG)   # process_cpu_seconds_total, process_resident_m
 PlatformCollector(registry=REG)  # python_info
 GCCollector(registry=REG)        # python_gc_* totals
 
-# Only “what was actually served”
-REQS_SERVED = Counter(
-    "loadgen_requests_served_total",
-    "Number of /hot requests completed successfully (HTTP 200).",
-    registry=REG,
-)
-INFLIGHT = Gauge(
-    "loadgen_inflight",
-    "In-flight /hot requests (per-process).",
-    registry=REG,
-)
-THREADS_CURRENT = Gauge(
-    "loadgen_threads_current",
-    "Python threading.active_count().",
-    registry=REG,
-)
-CFG_GAUGE = Gauge("loadgen_config", "Runtime config values.", ["key"], registry=REG)
-CFG_GAUGE.labels(key="max_inflight").set(MAX_INFLIGHT)
-CFG_GAUGE.labels(key="default_cpu_ms").set(CPU_MS)
-CFG_GAUGE.labels(key="pbkdf2_iters").set(PBKDF2_ITERS)
+# Node gauges used by the dashboard
+NODE_READY_GAUGE        = Gauge("k8s_node_ready_gauge", "Node Ready (1/0)", ["node"], registry=REG)
+NODE_CAP_CPU_CORES      = Gauge("k8s_node_capacity_cpu_cores", "Node capacity.cpu (cores)", ["node"], registry=REG)
+NODE_ALLOC_CPU_CORES    = Gauge("k8s_node_allocatable_cpu_cores", "Node allocatable.cpu (cores)", ["node"], registry=REG)
+NODE_CAP_MEM_BYTES      = Gauge("k8s_node_capacity_memory_bytes", "Node capacity.memory (bytes)", ["node"], registry=REG)
+NODE_ALLOC_MEM_BYTES    = Gauge("k8s_node_allocatable_memory_bytes", "Node allocatable.memory (bytes)", ["node"], registry=REG)
 
-# Node capacity snapshots (handy for dashboards)
-NODE_READY_SECONDS = Gauge("k8s_node_ready_seconds", "Node create→Ready seconds", ["node"], registry=REG)
-NODE_READY_GAUGE   = Gauge("k8s_node_ready_gauge", "Node Ready (1/0)", ["node"], registry=REG)
-NODE_UNSCHEDULABLE = Gauge("k8s_node_unschedulable", "Node spec.unschedulable (1/0)", ["node"], registry=REG)
-NODE_CAP_CPU_CORES   = Gauge("k8s_node_capacity_cpu_cores", "Node capacity.cpu (cores)", ["node"], registry=REG)
-NODE_ALLOC_CPU_CORES = Gauge("k8s_node_allocatable_cpu_cores", "Node allocatable.cpu (cores)", ["node"], registry=REG)
-NODE_CAP_MEM_BYTES   = Gauge("k8s_node_capacity_memory_bytes", "Node capacity.memory (bytes)", ["node"], registry=REG)
-NODE_ALLOC_MEM_BYTES = Gauge("k8s_node_allocatable_memory_bytes", "Node allocatable.memory (bytes)", ["node"], registry=REG)
-
-# ---------- CPU burner
+# ---------- CPU burner (for generating load)
 _gate = threading.BoundedSemaphore(MAX_INFLIGHT)
 _payload = b"x" * 64
 _salt = b"salt"
@@ -83,7 +59,7 @@ application = app  # mod_wsgi compatibility
 
 @app.get("/hot")
 def hot():
-    # per-request burn settings (still honored, just not exported as histograms)
+    # simple CPU burner; no request metrics exported
     try:
         ms = max(0, int(request.args.get("cpu_ms", CPU_MS)))
     except Exception:
@@ -94,20 +70,14 @@ def hot():
         parallel = 1
     parallel = max(1, min(parallel, (os.cpu_count() or 1) * 8))
 
-    # Always block until a slot is free (no 503 path at all)
     _gate.acquire()
-    INFLIGHT.inc()
-    THREADS_CURRENT.set(threading.active_count())
     try:
         if parallel == 1:
             _busy_ms(ms)
         else:
             _burn_parallel(ms, parallel)
-        REQS_SERVED.inc()
         return "ok\n", 200
     finally:
-        INFLIGHT.dec()
-        THREADS_CURRENT.set(threading.active_count())
         _gate.release()
 
 @app.get("/metrics")
@@ -122,24 +92,18 @@ def healthz():
 def root():
     return (
         "autoscale-probe endpoints:\n"
-        "  /hot?cpu_ms=NN&parallel=M   -> CPU burn (PBKDF2), blocks when saturated (no 503)\n"
+        "  /hot?cpu_ms=NN&parallel=M   -> CPU burn (PBKDF2), blocks when saturated\n"
         "  /metrics                    -> Prometheus exposition\n"
         "  /healthz                    -> liveness/readiness\n",
         200,
     )
 
-# ---------- K8s node watcher (optional, with delete & reconcile to avoid ghost nodes)
-def _node_is_ready(n):
+# ---------- Helpers for K8s node quantities
+def _node_is_ready(n) -> bool:
     for cond in (n.status.conditions or []):
         if cond.type == "Ready":
             return cond.status == "True"
     return False
-
-def _node_ready_transition(n):
-    for cond in (n.status.conditions or []):
-        if cond.type == "Ready" and cond.status == "True" and cond.last_transition_time:
-            return cond.last_transition_time
-    return None
 
 def _parse_quantity_cpu(q: str) -> float:
     if q is None: return 0.0
@@ -160,9 +124,8 @@ _NODES_LOCK = threading.Lock()
 KNOWN_NODES = set()
 
 def _remove_node_series(name: str):
-    """Delete all node-labelled time series for a node."""
     for g in (
-        NODE_READY_SECONDS, NODE_READY_GAUGE, NODE_UNSCHEDULABLE,
+        NODE_READY_GAUGE,
         NODE_CAP_CPU_CORES, NODE_ALLOC_CPU_CORES,
         NODE_CAP_MEM_BYTES, NODE_ALLOC_MEM_BYTES,
     ):
@@ -175,16 +138,9 @@ def _remove_node_series(name: str):
     print(f"[autoscale-probe] removed metrics for node {name}", file=sys.stderr)
 
 def _export_node(n):
-    """Set gauges for a node object and mark it as known."""
     name = n.metadata.name
     NODE_READY_GAUGE.labels(node=name).set(1 if _node_is_ready(n) else 0)
-    NODE_UNSCHEDULABLE.labels(node=name).set(1 if bool(getattr(n.spec, "unschedulable", False)) else 0)
-    rt = _node_ready_transition(n)
-    if rt:
-        d = (rt - n.metadata.creation_timestamp).total_seconds()
-        if d > 0:
-            NODE_READY_SECONDS.labels(node=name).set(d)
-    cap = n.status.capacity or {}
+    cap   = n.status.capacity or {}
     alloc = n.status.allocatable or {}
     NODE_CAP_CPU_CORES.labels(node=name).set(_parse_quantity_cpu(cap.get("cpu")))
     NODE_ALLOC_CPU_CORES.labels(node=name).set(_parse_quantity_cpu(alloc.get("cpu")))
@@ -206,12 +162,10 @@ def watch_nodes():
             v1 = client.CoreV1Api()
             w = watch.Watch()
 
-            # Prime from current list
+            # Prime
             current = {n.metadata.name: n for n in v1.list_node().items}
             for n in current.values():
                 _export_node(n)
-
-            # Remove any stale label sets from previous runs
             with _NODES_LOCK:
                 stale = KNOWN_NODES.difference(current.keys())
             for name in list(stale):
@@ -219,10 +173,10 @@ def watch_nodes():
 
             last_reconcile = time.time()
 
-            # Stream updates
+            # Stream
             for ev in w.stream(v1.list_node, _request_timeout=300):
                 et = ev.get("type")
-                n = ev.get("object")
+                n  = ev.get("object")
                 if not n or not getattr(n, "metadata", None):
                     continue
                 name = n.metadata.name
@@ -231,10 +185,9 @@ def watch_nodes():
                     _remove_node_series(name)
                     continue
 
-                # ADDED / MODIFIED / BOOKMARK
                 _export_node(n)
 
-                # Periodic reconcile in case we missed deletes
+                # periodic reconcile to catch missed deletes
                 if time.time() - last_reconcile > 60:
                     listed = {nn.metadata.name for nn in v1.list_node().items}
                     with _NODES_LOCK:
