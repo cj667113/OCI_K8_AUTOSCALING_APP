@@ -76,8 +76,13 @@ spec:
           initialDelaySeconds: 10
           periodSeconds: 10
         resources:
-          requests: { cpu: "200m", memory: "128Mi" }
-          # Intentionally no limits → can consume full node CPU
+          requests:
+            cpu: "1"
+            memory: "1Gi"
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+            
 ---
 apiVersion: v1
 kind: Service
