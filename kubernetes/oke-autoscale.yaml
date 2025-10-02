@@ -88,6 +88,10 @@ spec:
         ports:
         - name: grafana
           containerPort: 3000
+        resources:
+          requests:
+            cpu: "1"
+            memory: "1Gi"
         volumeMounts:
         - { name: datasource,      mountPath: /etc/grafana/provisioning/datasources }
         - { name: dashboards,      mountPath: /etc/grafana/provisioning/dashboards }
@@ -101,7 +105,7 @@ spec:
           - configMap: { name: grafana-dash-provider }
       - name: dashboards-json
         configMap: { name: grafana-dashboard }
-
+      
 ---
 apiVersion: v1
 kind: Service
@@ -427,6 +431,10 @@ spec:
         ports:
         - name: https
           containerPort: 4443
+        resources:
+          requests:
+            cpu: "1"
+            memory: "1Gi"
         volumeMounts:
         - name: tmp-dir
           mountPath: /tmp
@@ -544,6 +552,10 @@ spec:
         ports:
         - name: http
           containerPort: 9090
+        resources:
+          requests:
+            cpu: "1"
+            memory: "1Gi"
         volumeMounts:
         - { name: config, mountPath: /etc/prometheus }
         - { name: data,   mountPath: /prometheus }
