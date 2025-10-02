@@ -19,7 +19,7 @@ Deploy a CPU-intensive demo app (**autoscale-probe**) alongside **Grafana** in t
 - [Deploy](#deploy)
 - [Grab the Load Balancer IP](#grab-the-load-balancer-ip)
 - [Use the App and Grafana](#use-the-app-and-grafana)
-- [Screenshots](#sample-grafana-dashboard) 
+- [Sample Grafana Dashboard](#sample-grafana-dashboard) 
 - [Generate Load & Watch Autoscaling](#generate-load--watch-autoscaling)
 - [Enable the OCI Cluster Autoscaler](#enable-the-oci-cluster-autoscaler)
 - [Troubleshooting](#troubleshooting)
