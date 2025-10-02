@@ -74,7 +74,7 @@ Namespaces:
 
 - **Namespace `monitoring`**
   - `Deployment grafana` + `Service grafana` (**LoadBalancer** on port **80**)
-  - Grafana provisioning `ConfigMap`s:
+  - Grafana provisioning `ConfigMap`:
     - `grafana-datasource` → Prometheus datasource
     - `grafana-dashboard`  → “OKE Autoscale” dashboard JSON
     - `grafana-dash-provider` → dashboard file provider
