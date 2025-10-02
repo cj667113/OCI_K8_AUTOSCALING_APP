@@ -341,7 +341,7 @@ data:
       "title": "OKE Autoscale: Node CPU + Capacity",
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 19,
+      "version": 20,
       "refresh": "10s",
       "panels": [
         {
@@ -360,7 +360,16 @@ data:
             }
           ],
           "fieldConfig": {
-            "defaults": { "unit": "percent", "min": 0, "max": 100, "decimals": 0 },
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "decimals": 0,
+              "custom": {
+                "spanNulls": true,
+                "lineInterpolation": "smooth"
+              }
+            },
             "overrides": [
               {
                 "matcher": { "id": "byName", "options": "cluster" },
@@ -390,7 +399,16 @@ data:
             }
           ],
           "fieldConfig": {
-            "defaults": { "unit": "percent", "min": 0, "max": 100, "decimals": 0 },
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "decimals": 0,
+              "custom": {
+                "spanNulls": true,
+                "lineInterpolation": "smooth"
+              }
+            },
             "overrides": [
               {
                 "matcher": { "id": "byName", "options": "cluster" },
@@ -411,6 +429,14 @@ data:
           "targets": [
             { "expr": "sum( max by (node) (k8s_node_ready_gauge{job=\"autoscale-probe\"}) )", "legendFormat": "ready" }
           ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "spanNulls": true,
+                "lineInterpolation": "smooth"
+              }
+            }
+          },
           "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
         },
         {
@@ -419,6 +445,14 @@ data:
           "targets": [
             { "expr": "sum(up{job=\"autoscale-probe\"})", "legendFormat": "up" }
           ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "spanNulls": true,
+                "lineInterpolation": "smooth"
+              }
+            }
+          },
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
         },
 
@@ -429,6 +463,14 @@ data:
             { "expr": "sum( max by (node) (k8s_node_capacity_cpu_cores{job=\"autoscale-probe\"}) )", "legendFormat": "capacity" },
             { "expr": "sum( max by (node) (k8s_node_allocatable_cpu_cores{job=\"autoscale-probe\"}) )", "legendFormat": "alloc" }
           ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "spanNulls": true,
+                "lineInterpolation": "smooth"
+              }
+            }
+          },
           "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
         },
         {
@@ -438,6 +480,14 @@ data:
             { "expr": "sum( max by (node) (k8s_node_capacity_memory_bytes{job=\"autoscale-probe\"}) ) / 1024 / 1024 / 1024", "legendFormat": "capacity" },
             { "expr": "sum( max by (node) (k8s_node_allocatable_memory_bytes{job=\"autoscale-probe\"}) ) / 1024 / 1024 / 1024", "legendFormat": "alloc" }
           ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "spanNulls": true,
+                "lineInterpolation": "smooth"
+              }
+            }
+          },
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
         },
 
