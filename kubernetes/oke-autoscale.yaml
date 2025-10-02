@@ -282,9 +282,8 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
         resources:
-          requests:
-            cpu: "1"
-            memory: "1Gi"
+          requests: { cpu: 50m, memory: 60Mi }
+          limits:   { cpu: 200m, memory: 200Mi }
 ---
 apiVersion: apiregistration.k8s.io/v1
 kind: APIService
@@ -341,33 +340,43 @@ data:
       "title": "OKE Autoscale: CPU & Memory",
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 8,
+      "version": 9,
       "refresh": "10s",
       "panels": [
         {
           "type": "timeseries",
-          "title": "App CPU (cores)",
+          "title": "App CPU (cores) — container/app",
           "targets": [
-            { "expr": "sum(rate(process_cpu_seconds_total{job=\"autoscale-probe\"}[1m])) by (instance)", "legendFormat": "{{instance}}" }
+            {
+              "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{job=\"kubelet-cadvisor\", namespace=\"autoscale\", pod=~\"autoscale-probe.*\", container=\"app\"}[1m]))",
+              "legendFormat": "{{pod}}"
+            }
           ],
           "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 }
         },
         {
           "type": "timeseries",
-          "title": "App CPU (% of 1 core)",
+          "title": "App CPU (% of 1 core) — container/app",
           "targets": [
-            { "expr": "100 * sum(rate(process_cpu_seconds_total{job=\"autoscale-probe\"}[1m])) by (instance)", "legendFormat": "{{instance}}" }
+            {
+              "expr": "100 * sum by (pod) (rate(container_cpu_usage_seconds_total{job=\"kubelet-cadvisor\", namespace=\"autoscale\", pod=~\"autoscale-probe.*\", container=\"app\"}[1m]))",
+              "legendFormat": "{{pod}}"
+            }
           ],
           "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 }
         },
         {
           "type": "timeseries",
-          "title": "App RSS (MiB)",
+          "title": "App Memory RSS (MiB) — container/app",
           "targets": [
-            { "expr": "process_resident_memory_bytes{job=\"autoscale-probe\"} / 1024 / 1024", "legendFormat": "{{instance}}" }
+            {
+              "expr": "sum by (pod) (container_memory_working_set_bytes{job=\"kubelet-cadvisor\", namespace=\"autoscale\", pod=~\"autoscale-probe.*\", container=\"app\"}) / 1024 / 1024",
+              "legendFormat": "{{pod}}"
+            }
           ],
           "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 }
         },
+
         {
           "type": "timeseries",
           "title": "Ready nodes (count)",
@@ -376,6 +385,7 @@ data:
           ],
           "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 }
         },
+
         {
           "type": "timeseries",
           "title": "Cluster CPU capacity vs allocatable (cores)",
@@ -394,6 +404,7 @@ data:
           ],
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
         },
+
         {
           "type": "state-timeline",
           "title": "Node Ready state (per-node)",
@@ -506,7 +517,7 @@ spec:
     port: 80
     targetPort: http
 ---
-# Prometheus (scrapes autoscale app)
+# Prometheus (scrapes autoscale app + kubelet cAdvisor)
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -519,7 +530,7 @@ metadata:
   name: prometheus
 rules:
 - apiGroups: [""]
-  resources: ["nodes","nodes/metrics","services","endpoints","pods","namespaces"]
+  resources: ["nodes","nodes/metrics","nodes/proxy","services","endpoints","pods","namespaces"]
   verbs: ["get","list","watch"]
 - nonResourceURLs: ["/metrics"]
   verbs: ["get"]
@@ -547,7 +558,9 @@ data:
     global:
       scrape_interval: 15s
       evaluation_interval: 15s
+
     scrape_configs:
+    # Scrape the demo app (autoscale-probe) via Service discovery
     - job_name: 'autoscale-probe'
       kubernetes_sd_configs:
       - role: endpoints
@@ -557,6 +570,23 @@ data:
       - { action: keep, source_labels: [__meta_kubernetes_service_label_app], regex: autoscale-probe }
       - { action: keep, source_labels: [__meta_kubernetes_endpoint_port_name], regex: (metrics|http) }
       - { action: labelmap, regex: __meta_kubernetes_service_label_(.*) }
+
+    # Scrape kubelet cAdvisor for container/pod CPU/Memory (aligns with kubectl top)
+    - job_name: 'kubelet-cadvisor'
+      scheme: https
+      tls_config:
+        insecure_skip_verify: true
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      kubernetes_sd_configs:
+      - role: node
+      relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
 ---
 apiVersion: apps/v1
 kind: Deployment
