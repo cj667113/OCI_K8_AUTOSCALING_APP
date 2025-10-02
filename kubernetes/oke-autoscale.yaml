@@ -340,7 +340,7 @@ data:
       "title": "OKE Autoscale: Node CPU + Capacity",
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 12,
+      "version": 13,
       "refresh": "10s",
       "panels": [
         {
@@ -441,7 +441,7 @@ data:
           "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 }
         },
 
-        /* === NEW PANELS === */
+        /* === NEW === */
         {
           "type": "timeseries",
           "title": "autoscale-probe Pods Up (count)",
@@ -467,8 +467,7 @@ data:
                   }
                 }
               ]
-            },
-            "overrides": []
+            }
           },
           "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 }
