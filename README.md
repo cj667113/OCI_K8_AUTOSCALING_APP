@@ -154,12 +154,7 @@ kubectl -n monitoring get svc prometheus
 
 ## Sample Grafana Dashboard
 
-- **CPU/Memory Utilization (per node + cluster):** from **kubelet cAdvisor**.
-- **Ready nodes (count) & Node Ready timeline:** from `k8s_node_ready_gauge` (exported by the app).
-- **Cluster Capacity vs Allocatable (CPU/Mem):** from the app’s `k8s_node_capacity_*` and `k8s_node_allocatable_*` gauges.
-- **Pods Up & Pod Health:** from `up{job="autoscale-probe"}`; Prometheus relabeling adds `pod`/`service` so per‑pod views work.
-
-Lines are **smoothed** and **connect nulls** to avoid brief scrape gaps drawing breaks.
+<p align="center"> <a href="images/sample.png"> <img src="images/sample.png" alt="Grafana dashboard showing OKE autoscaling metrics" width="100%"> </a> </p> <sub><em>Grafana dashboard included via ConfigMaps (see <code>grafana-dashboard</code> and <code>grafana-datasource</code> in the manifest).</em></sub>
 
 ---
 
