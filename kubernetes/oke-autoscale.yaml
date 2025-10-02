@@ -340,7 +340,7 @@ data:
       "title": "OKE Autoscale: Node CPU + Capacity",
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 10,
+      "version": 11,
       "refresh": "10s",
       "panels": [
         {
@@ -368,11 +368,34 @@ data:
 
         {
           "type": "timeseries",
+          "title": "Node Memory Utilization (%) by node",
+          "targets": [
+            {
+              "expr": "100 * sum by (node) (container_memory_working_set_bytes{job=\"kubelet-cadvisor\",container!~\"^POD$|^$\",image!=\"\"}) / on (node) group_left sum by (node) (machine_memory_bytes{job=\"kubelet-cadvisor\"})",
+              "legendFormat": "{{node}}"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+        },
+        {
+          "type": "timeseries",
+          "title": "Cluster Memory Utilization (%)",
+          "targets": [
+            {
+              "expr": "100 * sum(container_memory_working_set_bytes{job=\"kubelet-cadvisor\",container!~\"^POD$|^$\",image!=\"\"}) / sum(machine_memory_bytes{job=\"kubelet-cadvisor\"})",
+              "legendFormat": "cluster"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+        },
+
+        {
+          "type": "timeseries",
           "title": "Ready nodes (count)",
           "targets": [
             { "expr": "sum( max by (node) (k8s_node_ready_gauge{job=\"autoscale-probe\"}) )", "legendFormat": "ready" }
           ],
-          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 }
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 }
         },
 
         {
@@ -382,7 +405,7 @@ data:
             { "expr": "sum( max by (node) (k8s_node_capacity_cpu_cores{job=\"autoscale-probe\"}) )", "legendFormat": "capacity" },
             { "expr": "sum( max by (node) (k8s_node_allocatable_cpu_cores{job=\"autoscale-probe\"}) )", "legendFormat": "alloc" }
           ],
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 }
         },
         {
           "type": "timeseries",
@@ -391,7 +414,7 @@ data:
             { "expr": "sum( max by (node) (k8s_node_capacity_memory_bytes{job=\"autoscale-probe\"}) ) / 1024 / 1024 / 1024", "legendFormat": "capacity" },
             { "expr": "sum( max by (node) (k8s_node_allocatable_memory_bytes{job=\"autoscale-probe\"}) ) / 1024 / 1024 / 1024", "legendFormat": "alloc" }
           ],
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 }
         },
 
         {
@@ -417,7 +440,7 @@ data:
           "options": {
             "legend": { "displayMode": "list", "placement": "bottom" }
           },
-          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 }
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 }
         }
       ]
     }
@@ -557,9 +580,8 @@ data:
         namespaces:
           names: ['autoscale']
       relabel_configs:
-      # keep only the metrics Service
-      - { action: keep, source_labels: [__meta_kubernetes_service_name], regex: autoscale-probe-metrics }
-      - { action: keep, source_labels: [__meta_kubernetes_endpoint_port_name], regex: metrics }
+      - { action: keep,  source_labels: [__meta_kubernetes_service_name],       regex: autoscale-probe-metrics }
+      - { action: keep,  source_labels: [__meta_kubernetes_endpoint_port_name], regex: metrics }
       - { action: labelmap, regex: __meta_kubernetes_service_label_(.*) }
 
     # Scrape kubelet cAdvisor (via API server proxy)
@@ -573,7 +595,7 @@ data:
       relabel_configs:
       - action: labelmap
         regex: __meta_kubernetes_node_label_(.+)
-      # add node label so Grafana queries using 'by (node)' work
+      # add a stable "node" label for Grafana groupings
       - source_labels: [__meta_kubernetes_node_name]
         target_label: node
       - target_label: __address__
