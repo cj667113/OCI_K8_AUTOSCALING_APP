@@ -337,6 +337,7 @@ metadata:
 data:
   oke-autoscale.json: |
     {
+      "uid": "oke-autoscale",
       "title": "OKE Autoscale: Node CPU + Capacity",
       "timezone": "browser",
       "schemaVersion": 38,
@@ -365,7 +366,6 @@ data:
           ],
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
         },
-
         {
           "type": "timeseries",
           "title": "Node Memory Utilization (%) by node",
@@ -388,7 +388,6 @@ data:
           ],
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
         },
-
         {
           "type": "timeseries",
           "title": "Ready nodes (count)",
@@ -397,7 +396,6 @@ data:
           ],
           "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 }
         },
-
         {
           "type": "timeseries",
           "title": "Cluster CPU capacity vs allocatable (cores)",
@@ -416,7 +414,6 @@ data:
           ],
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 }
         },
-
         {
           "type": "state-timeline",
           "title": "Node Ready state (per-node)",
@@ -430,7 +427,7 @@ data:
                   "type": "value",
                   "options": {
                     "0": { "text": "NotReady", "color": "red" },
-                    "1": { "text": "Ready",    "color": "green" }
+                    "1": { "text": "Ready", "color": "green" }
                   }
                 }
               ]
@@ -440,8 +437,6 @@ data:
           "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
           "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 }
         },
-
-        /* === NEW PANELS === */
         {
           "type": "timeseries",
           "title": "autoscale-probe Pods Up (count)",
@@ -463,7 +458,7 @@ data:
                   "type": "value",
                   "options": {
                     "0": { "text": "Down", "color": "red" },
-                    "1": { "text": "Up",   "color": "green" }
+                    "1": { "text": "Up", "color": "green" }
                   }
                 }
               ]
