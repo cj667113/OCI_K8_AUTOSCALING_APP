@@ -99,24 +99,11 @@ Namespaces:
 
 ## Deploy
 
-**Option A — Clone repo:**
+**Clone repo:**
 ```bash
 git clone https://github.com/cj667113/OCI_K8_AUTOSCALING_APP.git
 cd OCI_K8_AUTOSCALING_APP
 kubectl apply -f oke-autoscale.yaml
-```
-
-**Option B — Local file:**
-```bash
-kubectl apply -f oke-autoscale.yaml
-```
-
-Check core components:
-```bash
-kubectl get nodes
-kubectl get pods -n kube-system
-kubectl get pods -n autoscale
-kubectl get pods -n monitoring
 ```
 
 ---
