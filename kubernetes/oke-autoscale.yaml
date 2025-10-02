@@ -337,44 +337,33 @@ metadata:
 data:
   oke-autoscale.json: |
     {
-      "title": "OKE Autoscale: CPU & Memory",
+      "title": "OKE Autoscale: Node CPU + Capacity",
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 9,
+      "version": 10,
       "refresh": "10s",
       "panels": [
         {
           "type": "timeseries",
-          "title": "App CPU (cores) — container/app",
+          "title": "Node CPU Utilization (%) by node",
           "targets": [
             {
-              "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{job=\"kubelet-cadvisor\", namespace=\"autoscale\", pod=~\"autoscale-probe.*\", container=\"app\"}[1m]))",
-              "legendFormat": "{{pod}}"
+              "expr": "100 * sum by (node) (rate(container_cpu_usage_seconds_total{job=\"kubelet-cadvisor\",container!~\"^POD$|^$\",image!=\"\"}[2m])) / on (node) group_left sum by (node) (machine_cpu_cores{job=\"kubelet-cadvisor\"})",
+              "legendFormat": "{{node}}"
             }
           ],
-          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 }
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
         },
         {
           "type": "timeseries",
-          "title": "App CPU (% of 1 core) — container/app",
+          "title": "Cluster CPU Utilization (%)",
           "targets": [
             {
-              "expr": "100 * sum by (pod) (rate(container_cpu_usage_seconds_total{job=\"kubelet-cadvisor\", namespace=\"autoscale\", pod=~\"autoscale-probe.*\", container=\"app\"}[1m]))",
-              "legendFormat": "{{pod}}"
+              "expr": "100 * sum(rate(container_cpu_usage_seconds_total{job=\"kubelet-cadvisor\",container!~\"^POD$|^$\",image!=\"\"}[2m])) / sum(machine_cpu_cores{job=\"kubelet-cadvisor\"})",
+              "legendFormat": "cluster"
             }
           ],
-          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 }
-        },
-        {
-          "type": "timeseries",
-          "title": "App Memory RSS (MiB) — container/app",
-          "targets": [
-            {
-              "expr": "sum by (pod) (container_memory_working_set_bytes{job=\"kubelet-cadvisor\", namespace=\"autoscale\", pod=~\"autoscale-probe.*\", container=\"app\"}) / 1024 / 1024",
-              "legendFormat": "{{pod}}"
-            }
-          ],
-          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 }
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
         },
 
         {
@@ -432,6 +421,7 @@ data:
         }
       ]
     }
+
 ---
 apiVersion: v1
 kind: ConfigMap
