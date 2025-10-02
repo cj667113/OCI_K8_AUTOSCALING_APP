@@ -100,6 +100,7 @@ Namespaces:
 ## Deploy
 
 **Clone repo:**
+
 ```bash
 git clone https://github.com/cj667113/OCI_K8_AUTOSCALING_APP.git
 cd OCI_K8_AUTOSCALING_APP
@@ -166,7 +167,8 @@ kubectl get nodes -w
 ## Enable the OCI Cluster Autoscaler
 
 Docs:  
-https://docs.oracle.com/en-us/iaas/Content/ContEng/Tasks/contengconfiguringclusteraddons-configurationarguments.htm#contengconfiguringclusteraddons-configurationarguments_ClusterAutoscaler
+- [Cluster Autoscaler add-on overview](https://docs.oracle.com/en-us/iaas/Content/ContEng/Tasks/contengaddonmanagement_topic.htm)  
+- [Cluster Autoscaler add-on configuration arguments](https://docs.oracle.com/en-us/iaas/Content/ContEng/Tasks/contengconfiguringclusteraddons-configurationarguments.htm#contengconfiguringclusteraddons-configurationarguments_ClusterAutoscaler)
 
 OCI CLI example:
 ```bash
