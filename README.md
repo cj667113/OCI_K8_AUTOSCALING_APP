@@ -86,7 +86,7 @@ Namespaces:
 - **OKE** cluster with the **OCI Cloud Controller Manager** (for LB)
 - `kubectl` configured to point at your cluster
 - (Optional) [`hey`](https://github.com/rakyll/hey) for load generation
-- Basic egress access for image pulls (ghcr.io, grafana, prom, k8s images)
+- Basic egress access for image pulls (ghcr.io, grafana, prometheus, k8s images)
 
 > **Security:** Grafana defaults to `admin/admin` in this demo. For production, inject credentials via a `Secret` and env, or use an IdP.
 
