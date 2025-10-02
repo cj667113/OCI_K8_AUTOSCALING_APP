@@ -30,13 +30,7 @@ Each component is exposed through its **own** OCI Layer‑7 Load Balancer **on p
 
 ## Overview
 
-This setup targets **OKE** and demonstrates HPA‑driven scaling of a CPU‑bound app while visualizing metrics in **Grafana**.  
-Unlike the combined‑pod approach, **Grafana runs in its own Deployment** and is published by a **separate** `Service` of type `LoadBalancer`.
-
-**Metrics sources used by the bundled dashboard:**
-- **CPU & Memory Utilization (per‑node + cluster):** from **kubelet cAdvisor** (`container_*`, `machine_*`).
-- **Node readiness & capacity/allocatable:** custom gauges exported by `autoscale-probe` (`k8s_node_*`).
-- **Pods Up & Pod Health:** from Prometheus `up{job="autoscale-probe"}` (labels added via relabeling).
+This setup targets **OKE** and demonstrates HPA‑driven scaling of a CPU‑bound app while visualizing metrics in **Grafana**. Unlike the combined‑pod approach, **Grafana runs in its own Deployment** and is published by a **separate** Service of type LoadBalancer.
 
 ---
 
