@@ -341,7 +341,7 @@ data:
       "title": "OKE Autoscale: Node CPU + Capacity",
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 16,
+      "version": 17,
       "refresh": "10s",
       "panels": [
         {
@@ -372,9 +372,8 @@ data:
             ]
           },
           "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
-          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 }
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
         },
-
         {
           "type": "timeseries",
           "title": "Memory Utilization (%) — per node + cluster",
@@ -403,7 +402,7 @@ data:
             ]
           },
           "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
-          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 }
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
         },
 
         {
@@ -412,7 +411,7 @@ data:
           "targets": [
             { "expr": "sum( max by (node) (k8s_node_ready_gauge{job=\"autoscale-probe\"}) )", "legendFormat": "ready" }
           ],
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
         },
         {
           "type": "timeseries",
@@ -420,7 +419,7 @@ data:
           "targets": [
             { "expr": "sum(up{job=\"autoscale-probe\"})", "legendFormat": "up" }
           ],
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
         },
 
         {
@@ -430,7 +429,7 @@ data:
             { "expr": "sum( max by (node) (k8s_node_capacity_cpu_cores{job=\"autoscale-probe\"}) )", "legendFormat": "capacity" },
             { "expr": "sum( max by (node) (k8s_node_allocatable_cpu_cores{job=\"autoscale-probe\"}) )", "legendFormat": "alloc" }
           ],
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 }
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
         },
         {
           "type": "timeseries",
@@ -439,7 +438,7 @@ data:
             { "expr": "sum( max by (node) (k8s_node_capacity_memory_bytes{job=\"autoscale-probe\"}) ) / 1024 / 1024 / 1024", "legendFormat": "capacity" },
             { "expr": "sum( max by (node) (k8s_node_allocatable_memory_bytes{job=\"autoscale-probe\"}) ) / 1024 / 1024 / 1024", "legendFormat": "alloc" }
           ],
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 }
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
         },
 
         {
@@ -457,7 +456,7 @@ data:
             "overrides": []
           },
           "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
-          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 }
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 }
         },
 
         {
@@ -475,7 +474,7 @@ data:
             "overrides": []
           },
           "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
-          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 40 }
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 }
         }
       ]
     }
