@@ -79,33 +79,6 @@ spec:
           requests:
             cpu: "1"
             memory: "1Gi"
-      - name: grafana
-        image: grafana/grafana:10.4.5
-        env:
-        - { name: GF_SECURITY_ADMIN_USER, value: "admin" }
-        - { name: GF_SECURITY_ADMIN_PASSWORD, value: "admin" }
-        - { name: GF_PATHS_PROVISIONING, value: /etc/grafana/provisioning }
-        ports:
-        - name: grafana
-          containerPort: 3000
-        resources:
-          requests:
-            cpu: "1"
-            memory: "1Gi"
-        volumeMounts:
-        - { name: datasource,      mountPath: /etc/grafana/provisioning/datasources }
-        - { name: dashboards,      mountPath: /etc/grafana/provisioning/dashboards }
-        - { name: dashboards-json, mountPath: /var/lib/grafana/dashboards }
-      volumes:
-      - name: datasource
-        configMap: { name: grafana-datasource }
-      - name: dashboards
-        projected:
-          sources:
-          - configMap: { name: grafana-dash-provider }
-      - name: dashboards-json
-        configMap: { name: grafana-dashboard }
-      
 ---
 apiVersion: v1
 kind: Service
@@ -120,7 +93,7 @@ metadata:
     oci.oraclecloud.com/load-balancer-shape-flex-min: "10"   # Mbps
     oci.oraclecloud.com/load-balancer-shape-flex-max: "10"   # Mbps
     oci-load-balancer.oraclecloud.com/health-check: '{"protocol":"TCP","port":8080,"retries":2,"timeoutInMillis":5000}'
-    service.beta.kubernetes.io/oci-load-balancer-security-list-management-mode: "None" #Needed for Use Pod IPs
+    service.beta.kubernetes.io/oci-load-balancer-security-list-management-mode: "None" # Needed for Use Pod IPs
 spec:
   type: LoadBalancer
   allocateLoadBalancerNodePorts: false # Use Pod IPs
@@ -131,9 +104,6 @@ spec:
   - name: http
     port: 80
     targetPort: http          # -> container port 8080
-  - name: grafana
-    port: 3000
-    targetPort: grafana       # -> container port 3000
 ---
 apiVersion: v1
 kind: Service
@@ -175,139 +145,6 @@ spec:
       - type: Percent
         value: 100
         periodSeconds: 15
-
-# =========================
-# GRAFANA CONFIG (moved to autoscale namespace so sidecar can mount)
-# =========================
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-datasource
-  namespace: autoscale
-  labels:
-    grafana_datasource: "1"
-data:
-  prometheus.yaml: |
-    apiVersion: 1
-    datasources:
-    - name: Prometheus
-      type: prometheus
-      access: proxy
-      url: http://prometheus.monitoring.svc.cluster.local:9090
-      isDefault: true
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-dashboard
-  namespace: autoscale
-  labels:
-    grafana_dashboard: "1"
-data:
-  oke-autoscale.json: |
-    {
-      "title": "OKE Autoscale: CPU & Memory",
-      "timezone": "browser",
-      "schemaVersion": 38,
-      "version": 8,
-      "refresh": "10s",
-      "panels": [
-        {
-          "type": "timeseries",
-          "title": "App CPU (cores)",
-          "targets": [
-            { "expr": "sum(rate(process_cpu_seconds_total{job=\"autoscale-probe\"}[1m])) by (instance)", "legendFormat": "{{instance}}" }
-          ],
-          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 }
-        },
-        {
-          "type": "timeseries",
-          "title": "App CPU (% of 1 core)",
-          "targets": [
-            { "expr": "100 * sum(rate(process_cpu_seconds_total{job=\"autoscale-probe\"}[1m])) by (instance)", "legendFormat": "{{instance}}" }
-          ],
-          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 }
-        },
-        {
-          "type": "timeseries",
-          "title": "App RSS (MiB)",
-          "targets": [
-            { "expr": "process_resident_memory_bytes{job=\"autoscale-probe\"} / 1024 / 1024", "legendFormat": "{{instance}}" }
-          ],
-          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 }
-        },
-        {
-          "type": "timeseries",
-          "title": "Ready nodes (count)",
-          "targets": [
-            { "expr": "sum( max by (node) (k8s_node_ready_gauge{job=\"autoscale-probe\"}) )", "legendFormat": "ready" }
-          ],
-          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 }
-        },
-        {
-          "type": "timeseries",
-          "title": "Cluster CPU capacity vs allocatable (cores)",
-          "targets": [
-            { "expr": "sum( max by (node) (k8s_node_capacity_cpu_cores{job=\"autoscale-probe\"}) )", "legendFormat": "capacity" },
-            { "expr": "sum( max by (node) (k8s_node_allocatable_cpu_cores{job=\"autoscale-probe\"}) )", "legendFormat": "alloc" }
-          ],
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
-        },
-        {
-          "type": "timeseries",
-          "title": "Cluster Memory capacity vs allocatable (GiB)",
-          "targets": [
-            { "expr": "sum( max by (node) (k8s_node_capacity_memory_bytes{job=\"autoscale-probe\"}) ) / 1024 / 1024 / 1024", "legendFormat": "capacity" },
-            { "expr": "sum( max by (node) (k8s_node_allocatable_memory_bytes{job=\"autoscale-probe\"}) ) / 1024 / 1024 / 1024", "legendFormat": "alloc" }
-          ],
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
-        },
-        {
-          "type": "state-timeline",
-          "title": "Node Ready state (per-node)",
-          "targets": [
-            { "expr": "max by (node) (k8s_node_ready_gauge{job=\"autoscale-probe\"})", "legendFormat": "{{node}}" }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "0": { "text": "NotReady", "color": "red" },
-                    "1": { "text": "Ready",    "color": "green" }
-                  }
-                }
-              ]
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": { "displayMode": "list", "placement": "bottom" }
-          },
-          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 }
-        }
-      ]
-    }
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-dash-provider
-  namespace: autoscale
-data:
-  dashboards.yaml: |
-    apiVersion: 1
-    providers:
-    - name: 'default'
-      orgId: 1
-      folder: ''
-      type: file
-      disableDeletion: false
-      editable: true
-      options:
-        path: /var/lib/grafana/dashboards
 
 # =========================
 # METRICS SERVER (embedded, OKE-friendly & fixed /tmp)
@@ -431,10 +268,6 @@ spec:
         ports:
         - name: https
           containerPort: 4443
-        resources:
-          requests:
-            cpu: "1"
-            memory: "1Gi"
         volumeMounts:
         - name: tmp-dir
           mountPath: /tmp
@@ -468,7 +301,7 @@ spec:
     port: 443
 
 # =========================
-# MONITORING: Prometheus (scrapes autoscale app)
+# MONITORING: Grafana (own Deployment + LB on port 80) & Prometheus
 # =========================
 ---
 apiVersion: v1
@@ -476,6 +309,199 @@ kind: Namespace
 metadata:
   name: monitoring
 ---
+# Grafana Config (monitoring namespace)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource
+  namespace: monitoring
+  labels:
+    grafana_datasource: "1"
+data:
+  prometheus.yaml: |
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      access: proxy
+      url: http://prometheus.monitoring.svc.cluster.local:9090
+      isDefault: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  oke-autoscale.json: |
+    {
+      "title": "OKE Autoscale: CPU & Memory",
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "version": 8,
+      "refresh": "10s",
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "App CPU (cores)",
+          "targets": [
+            { "expr": "sum(rate(process_cpu_seconds_total{job=\"autoscale-probe\"}[1m])) by (instance)", "legendFormat": "{{instance}}" }
+          ],
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 }
+        },
+        {
+          "type": "timeseries",
+          "title": "App CPU (% of 1 core)",
+          "targets": [
+            { "expr": "100 * sum(rate(process_cpu_seconds_total{job=\"autoscale-probe\"}[1m])) by (instance)", "legendFormat": "{{instance}}" }
+          ],
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 }
+        },
+        {
+          "type": "timeseries",
+          "title": "App RSS (MiB)",
+          "targets": [
+            { "expr": "process_resident_memory_bytes{job=\"autoscale-probe\"} / 1024 / 1024", "legendFormat": "{{instance}}" }
+          ],
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 }
+        },
+        {
+          "type": "timeseries",
+          "title": "Ready nodes (count)",
+          "targets": [
+            { "expr": "sum( max by (node) (k8s_node_ready_gauge{job=\"autoscale-probe\"}) )", "legendFormat": "ready" }
+          ],
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 }
+        },
+        {
+          "type": "timeseries",
+          "title": "Cluster CPU capacity vs allocatable (cores)",
+          "targets": [
+            { "expr": "sum( max by (node) (k8s_node_capacity_cpu_cores{job=\"autoscale-probe\"}) )", "legendFormat": "capacity" },
+            { "expr": "sum( max by (node) (k8s_node_allocatable_cpu_cores{job=\"autoscale-probe\"}) )", "legendFormat": "alloc" }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+        },
+        {
+          "type": "timeseries",
+          "title": "Cluster Memory capacity vs allocatable (GiB)",
+          "targets": [
+            { "expr": "sum( max by (node) (k8s_node_capacity_memory_bytes{job=\"autoscale-probe\"}) ) / 1024 / 1024 / 1024", "legendFormat": "capacity" },
+            { "expr": "sum( max by (node) (k8s_node_allocatable_memory_bytes{job=\"autoscale-probe\"}) ) / 1024 / 1024 / 1024", "legendFormat": "alloc" }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
+        },
+        {
+          "type": "state-timeline",
+          "title": "Node Ready state (per-node)",
+          "targets": [
+            { "expr": "max by (node) (k8s_node_ready_gauge{job=\"autoscale-probe\"})", "legendFormat": "{{node}}" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": { "text": "NotReady", "color": "red" },
+                    "1": { "text": "Ready",    "color": "green" }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" }
+          },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 }
+        }
+      ]
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dash-provider
+  namespace: monitoring
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+    - name: 'default'
+      orgId: 1
+      folder: ''
+      type: file
+      disableDeletion: false
+      editable: true
+      options:
+        path: /var/lib/grafana/dashboards
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels: { app: grafana }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: grafana }
+  template:
+    metadata:
+      labels: { app: grafana }
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:10.4.5
+        env:
+        - { name: GF_SECURITY_ADMIN_USER, value: "admin" }
+        - { name: GF_SECURITY_ADMIN_PASSWORD, value: "admin" }
+        - { name: GF_PATHS_PROVISIONING, value: /etc/grafana/provisioning }
+        ports:
+        - name: http
+          containerPort: 3000
+        volumeMounts:
+        - { name: datasource,      mountPath: /etc/grafana/provisioning/datasources }
+        - { name: dashboards,      mountPath: /etc/grafana/provisioning/dashboards }
+        - { name: dashboards-json, mountPath: /var/lib/grafana/dashboards }
+      volumes:
+      - name: datasource
+        configMap: { name: grafana-datasource }
+      - name: dashboards
+        projected:
+          sources:
+          - configMap: { name: grafana-dash-provider }
+      - name: dashboards-json
+        configMap: { name: grafana-dashboard }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels: { app: grafana }
+  annotations:
+    oci.oraclecloud.com/load-balancer-type: "lb"
+    oci.oraclecloud.com/load-balancer-internal: "false"
+    oci.oraclecloud.com/load-balancer-shape: "flexible"
+    oci.oraclecloud.com/load-balancer-shape-flex-min: "10"   # Mbps
+    oci.oraclecloud.com/load-balancer-shape-flex-max: "10"   # Mbps
+    oci-load-balancer.oraclecloud.com/health-check: '{"protocol":"TCP","port":3000,"retries":2,"timeoutInMillis":5000}'
+    service.beta.kubernetes.io/oci-load-balancer-security-list-management-mode: "None" # Needed for Use Pod IPs
+spec:
+  type: LoadBalancer
+  allocateLoadBalancerNodePorts: false # Use Pod IPs
+  selector: { app: grafana }
+  externalTrafficPolicy: Cluster
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+---
+# Prometheus (scrapes autoscale app)
 apiVersion: v1
 kind: ServiceAccount
 metadata:
