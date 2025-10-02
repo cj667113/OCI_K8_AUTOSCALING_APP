@@ -341,7 +341,7 @@ data:
       "title": "OKE Autoscale: Node CPU + Capacity",
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 15,
+      "version": 16,
       "refresh": "10s",
       "panels": [
         {
@@ -371,10 +371,7 @@ data:
               }
             ]
           },
-          "options": {
-            "legend": { "displayMode": "list", "placement": "bottom" },
-            "tooltip": { "mode": "multi", "sort": "desc" }
-          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
           "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 }
         },
 
@@ -405,10 +402,7 @@ data:
               }
             ]
           },
-          "options": {
-            "legend": { "displayMode": "list", "placement": "bottom" },
-            "tooltip": { "mode": "multi", "sort": "desc" }
-          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
           "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 }
         },
 
@@ -418,7 +412,15 @@ data:
           "targets": [
             { "expr": "sum( max by (node) (k8s_node_ready_gauge{job=\"autoscale-probe\"}) )", "legendFormat": "ready" }
           ],
-          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 }
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+        },
+        {
+          "type": "timeseries",
+          "title": "autoscale-probe Pods Up (count)",
+          "targets": [
+            { "expr": "sum(up{job=\"autoscale-probe\"})", "legendFormat": "up" }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
         },
 
         {
@@ -449,13 +451,7 @@ data:
           "fieldConfig": {
             "defaults": {
               "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "0": { "text": "NotReady", "color": "red" },
-                    "1": { "text": "Ready", "color": "green" }
-                  }
-                }
+                { "type": "value", "options": { "0": { "text": "NotReady", "color": "red" }, "1": { "text": "Ready", "color": "green" } } }
               ]
             },
             "overrides": []
@@ -465,14 +461,6 @@ data:
         },
 
         {
-          "type": "timeseries",
-          "title": "autoscale-probe Pods Up (count)",
-          "targets": [
-            { "expr": "sum(up{job=\"autoscale-probe\"})", "legendFormat": "up" }
-          ],
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 }
-        },
-        {
           "type": "state-timeline",
           "title": "autoscale-probe Pod Health (per pod)",
           "targets": [
@@ -481,19 +469,13 @@ data:
           "fieldConfig": {
             "defaults": {
               "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "0": { "text": "Down", "color": "red" },
-                    "1": { "text": "Up", "color": "green" }
-                  }
-                }
+                { "type": "value", "options": { "0": { "text": "Down", "color": "red" }, "1": { "text": "Up", "color": "green" } } }
               ]
             },
             "overrides": []
           },
           "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 }
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 40 }
         }
       ]
     }
