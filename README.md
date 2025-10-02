@@ -19,6 +19,7 @@ Deploy a CPU-intensive demo app (**autoscale-probe**) alongside **Grafana** in t
 - [Deploy](#deploy)
 - [Grab the Load Balancer IP](#grab-the-load-balancer-ip)
 - [Use the App and Grafana](#use-the-app-and-grafana)
+- [Screenshots](#sample-grafana-dashboard) 
 - [Generate Load & Watch Autoscaling](#generate-load--watch-autoscaling)
 - [Enable the OCI Cluster Autoscaler](#enable-the-oci-cluster-autoscaler)
 - [Troubleshooting](#troubleshooting)
@@ -141,6 +142,18 @@ Prometheus is internal to the cluster:
 ```bash
 kubectl -n monitoring get svc prometheus
 ```
+
+---
+
+## Sample Grafana Dashboard
+
+<p align="center">
+  <a href="images/sample.png">
+    <img src="images/sample.png" alt="Grafana dashboard showing OKE autoscaling metrics" width="100%">
+  </a>
+</p>
+
+<sub><em>Grafana dashboard included via ConfigMaps (see <code>grafana-dashboard</code> and <code>grafana-datasource</code> in the manifest).</em></sub>
 
 ---
 
