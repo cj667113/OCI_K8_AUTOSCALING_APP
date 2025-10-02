@@ -341,7 +341,7 @@ data:
       "title": "OKE Autoscale: Node CPU + Capacity",
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 14,
+      "version": 15,
       "refresh": "10s",
       "panels": [
         {
@@ -360,12 +360,7 @@ data:
             }
           ],
           "fieldConfig": {
-            "defaults": {
-              "unit": "percent",
-              "min": 0,
-              "max": 100,
-              "decimals": 0
-            },
+            "defaults": { "unit": "percent", "min": 0, "max": 100, "decimals": 0 },
             "overrides": [
               {
                 "matcher": { "id": "byName", "options": "cluster" },
@@ -385,29 +380,36 @@ data:
 
         {
           "type": "timeseries",
-          "title": "Node Memory Utilization (%) by node",
+          "title": "Memory Utilization (%) — per node + cluster",
           "targets": [
             {
+              "refId": "A",
               "expr": "100 * sum by (node) (container_memory_working_set_bytes{job=\"kubelet-cadvisor\",container!~\"^POD$|^$\",image!=\"\"}) / on (node) group_left sum by (node) (machine_memory_bytes{job=\"kubelet-cadvisor\"})",
               "legendFormat": "{{node}}"
-            }
-          ],
-          "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "decimals": 0 }, "overrides": [] },
-          "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
-        },
-        {
-          "type": "timeseries",
-          "title": "Cluster Memory Utilization (%)",
-          "targets": [
+            },
             {
+              "refId": "B",
               "expr": "100 * sum(container_memory_working_set_bytes{job=\"kubelet-cadvisor\",container!~\"^POD$|^$\",image!=\"\"}) / sum(machine_memory_bytes{job=\"kubelet-cadvisor\"})",
               "legendFormat": "cluster"
             }
           ],
-          "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "decimals": 0 }, "overrides": [] },
-          "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+          "fieldConfig": {
+            "defaults": { "unit": "percent", "min": 0, "max": 100, "decimals": 0 },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "cluster" },
+                "properties": [
+                  { "id": "custom.lineWidth", "value": 3 },
+                  { "id": "custom.fillOpacity", "value": 10 }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 }
         },
 
         {
@@ -447,7 +449,13 @@ data:
           "fieldConfig": {
             "defaults": {
               "mappings": [
-                { "type": "value", "options": { "0": { "text": "NotReady", "color": "red" }, "1": { "text": "Ready", "color": "green" } } }
+                {
+                  "type": "value",
+                  "options": {
+                    "0": { "text": "NotReady", "color": "red" },
+                    "1": { "text": "Ready", "color": "green" }
+                  }
+                }
               ]
             },
             "overrides": []
@@ -473,7 +481,13 @@ data:
           "fieldConfig": {
             "defaults": {
               "mappings": [
-                { "type": "value", "options": { "0": { "text": "Down", "color": "red" }, "1": { "text": "Up", "color": "green" } } }
+                {
+                  "type": "value",
+                  "options": {
+                    "0": { "text": "Down", "color": "red" },
+                    "1": { "text": "Up", "color": "green" }
+                  }
+                }
               ]
             },
             "overrides": []
