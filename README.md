@@ -1,4 +1,4 @@
-# OKE Autoscale Demo — Single Load Balancer (App + Grafana Sidecar)
+# OCI OKE Autoscale Demo — Single LB, App with Embedded Grafana
 
 Deploy a CPU-intensive demo app (**autoscale-probe**) alongside **Grafana** in the **same Pod** and expose both through **one** OCI Layer‑7 Load Balancer Service.
 
