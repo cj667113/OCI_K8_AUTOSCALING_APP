@@ -341,7 +341,7 @@ data:
       "title": "OKE Autoscale: Node CPU + Capacity",
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 18,
+      "version": 19,
       "refresh": "10s",
       "panels": [
         {
@@ -362,11 +362,13 @@ data:
           "fieldConfig": {
             "defaults": { "unit": "percent", "min": 0, "max": 100, "decimals": 0 },
             "overrides": [
-              { "matcher": { "id": "byName", "options": "cluster" },
+              {
+                "matcher": { "id": "byName", "options": "cluster" },
                 "properties": [
                   { "id": "custom.lineWidth", "value": 3 },
                   { "id": "custom.fillOpacity", "value": 10 }
-                ] }
+                ]
+              }
             ]
           },
           "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
@@ -390,11 +392,13 @@ data:
           "fieldConfig": {
             "defaults": { "unit": "percent", "min": 0, "max": 100, "decimals": 0 },
             "overrides": [
-              { "matcher": { "id": "byName", "options": "cluster" },
+              {
+                "matcher": { "id": "byName", "options": "cluster" },
                 "properties": [
                   { "id": "custom.lineWidth", "value": 3 },
                   { "id": "custom.fillOpacity", "value": 10 }
-                ] }
+                ]
+              }
             ]
           },
           "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
@@ -458,7 +462,10 @@ data:
           "type": "state-timeline",
           "title": "autoscale-probe Pod Health (per pod)",
           "targets": [
-            { "expr": "max by (pod) (up{job=\"autoscale-probe\"})", "legendFormat": "{{pod}}" }
+            {
+              "expr": "max by (pod, instance) (up{job=\"autoscale-probe\"})",
+              "legendFormat": "{{pod}} {{instance}}"
+            }
           ],
           "fieldConfig": {
             "defaults": {
@@ -473,7 +480,6 @@ data:
         }
       ]
     }
-
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -612,8 +618,13 @@ data:
       - { action: keep,  source_labels: [__meta_kubernetes_service_name],       regex: autoscale-probe-metrics }
       - { action: keep,  source_labels: [__meta_kubernetes_endpoint_port_name], regex: metrics }
       - { action: labelmap, regex: __meta_kubernetes_service_label_(.*) }
+      # ➜ add pod/namespace/service labels so 'up' can be grouped per pod
+      - { source_labels: [__meta_kubernetes_namespace],  target_label: namespace }
+      - { source_labels: [__meta_kubernetes_pod_name],   target_label: pod }
+      - { source_labels: [__meta_kubernetes_service_name], target_label: service }
+      - { action: labelmap, regex: __meta_kubernetes_pod_label_(.+) }
 
-    # Scrape kubelet cAdvisor (via API server proxy)
+    # Scrape kubelet cAdvisor (still with node label so CPU/mem by node works)
     - job_name: 'kubelet-cadvisor'
       scheme: https
       tls_config:
@@ -624,7 +635,6 @@ data:
       relabel_configs:
       - action: labelmap
         regex: __meta_kubernetes_node_label_(.+)
-      # add a stable "node" label for Grafana groupings
       - source_labels: [__meta_kubernetes_node_name]
         target_label: node
       - target_label: __address__
