@@ -550,18 +550,19 @@ data:
       evaluation_interval: 15s
 
     scrape_configs:
-    # Scrape the demo app (autoscale-probe) via Service discovery
+    # Scrape ONLY the autoscale-probe metrics Service
     - job_name: 'autoscale-probe'
       kubernetes_sd_configs:
       - role: endpoints
         namespaces:
           names: ['autoscale']
       relabel_configs:
-      - { action: keep, source_labels: [__meta_kubernetes_service_label_app], regex: autoscale-probe }
-      - { action: keep, source_labels: [__meta_kubernetes_endpoint_port_name], regex: (metrics|http) }
+      # keep only the metrics Service
+      - { action: keep, source_labels: [__meta_kubernetes_service_name], regex: autoscale-probe-metrics }
+      - { action: keep, source_labels: [__meta_kubernetes_endpoint_port_name], regex: metrics }
       - { action: labelmap, regex: __meta_kubernetes_service_label_(.*) }
 
-    # Scrape kubelet cAdvisor for container/pod CPU/Memory (aligns with kubectl top)
+    # Scrape kubelet cAdvisor (via API server proxy)
     - job_name: 'kubelet-cadvisor'
       scheme: https
       tls_config:
@@ -572,6 +573,9 @@ data:
       relabel_configs:
       - action: labelmap
         regex: __meta_kubernetes_node_label_(.+)
+      # add node label so Grafana queries using 'by (node)' work
+      - source_labels: [__meta_kubernetes_node_name]
+        target_label: node
       - target_label: __address__
         replacement: kubernetes.default.svc:443
       - source_labels: [__meta_kubernetes_node_name]
