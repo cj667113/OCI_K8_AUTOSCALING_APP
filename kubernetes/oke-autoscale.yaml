@@ -282,8 +282,9 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
         resources:
-          requests: { cpu: 50m, memory: 60Mi }
-          limits:   { cpu: 200m, memory: 200Mi }
+          requests:
+            cpu: "1"
+            memory: "1Gi"
 ---
 apiVersion: apiregistration.k8s.io/v1
 kind: APIService
@@ -463,6 +464,10 @@ spec:
         ports:
         - name: http
           containerPort: 3000
+        resources:
+          requests:
+            cpu: "1"
+            memory: "1Gi"
         volumeMounts:
         - { name: datasource,      mountPath: /etc/grafana/provisioning/datasources }
         - { name: dashboards,      mountPath: /etc/grafana/provisioning/dashboards }
