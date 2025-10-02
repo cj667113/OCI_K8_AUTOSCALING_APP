@@ -341,31 +341,48 @@ data:
       "title": "OKE Autoscale: Node CPU + Capacity",
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 12,
+      "version": 14,
       "refresh": "10s",
       "panels": [
         {
           "type": "timeseries",
-          "title": "Node CPU Utilization (%) by node",
+          "title": "CPU Utilization (%) — per node + cluster",
           "targets": [
             {
+              "refId": "A",
               "expr": "100 * sum by (node) (rate(container_cpu_usage_seconds_total{job=\"kubelet-cadvisor\",container!~\"^POD$|^$\",image!=\"\"}[2m])) / on (node) group_left sum by (node) (machine_cpu_cores{job=\"kubelet-cadvisor\"})",
               "legendFormat": "{{node}}"
-            }
-          ],
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
-        },
-        {
-          "type": "timeseries",
-          "title": "Cluster CPU Utilization (%)",
-          "targets": [
+            },
             {
+              "refId": "B",
               "expr": "100 * sum(rate(container_cpu_usage_seconds_total{job=\"kubelet-cadvisor\",container!~\"^POD$|^$\",image!=\"\"}[2m])) / sum(machine_cpu_cores{job=\"kubelet-cadvisor\"})",
               "legendFormat": "cluster"
             }
           ],
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "decimals": 0
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "cluster" },
+                "properties": [
+                  { "id": "custom.lineWidth", "value": 3 },
+                  { "id": "custom.fillOpacity", "value": 10 }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 }
         },
+
         {
           "type": "timeseries",
           "title": "Node Memory Utilization (%) by node",
@@ -375,6 +392,8 @@ data:
               "legendFormat": "{{node}}"
             }
           ],
+          "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "decimals": 0 }, "overrides": [] },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
           "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
         },
         {
@@ -386,8 +405,11 @@ data:
               "legendFormat": "cluster"
             }
           ],
+          "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "decimals": 0 }, "overrides": [] },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
         },
+
         {
           "type": "timeseries",
           "title": "Ready nodes (count)",
@@ -396,6 +418,7 @@ data:
           ],
           "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 }
         },
+
         {
           "type": "timeseries",
           "title": "Cluster CPU capacity vs allocatable (cores)",
@@ -414,6 +437,7 @@ data:
           ],
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 }
         },
+
         {
           "type": "state-timeline",
           "title": "Node Ready state (per-node)",
@@ -423,13 +447,7 @@ data:
           "fieldConfig": {
             "defaults": {
               "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "0": { "text": "NotReady", "color": "red" },
-                    "1": { "text": "Ready", "color": "green" }
-                  }
-                }
+                { "type": "value", "options": { "0": { "text": "NotReady", "color": "red" }, "1": { "text": "Ready", "color": "green" } } }
               ]
             },
             "overrides": []
@@ -437,6 +455,7 @@ data:
           "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
           "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 }
         },
+
         {
           "type": "timeseries",
           "title": "autoscale-probe Pods Up (count)",
@@ -454,13 +473,7 @@ data:
           "fieldConfig": {
             "defaults": {
               "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "0": { "text": "Down", "color": "red" },
-                    "1": { "text": "Up", "color": "green" }
-                  }
-                }
+                { "type": "value", "options": { "0": { "text": "Down", "color": "red" }, "1": { "text": "Up", "color": "green" } } }
               ]
             },
             "overrides": []
