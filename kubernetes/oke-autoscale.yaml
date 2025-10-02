@@ -340,7 +340,7 @@ data:
       "title": "OKE Autoscale: Node CPU + Capacity",
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 11,
+      "version": 12,
       "refresh": "10s",
       "panels": [
         {
@@ -437,10 +437,41 @@ data:
             },
             "overrides": []
           },
-          "options": {
-            "legend": { "displayMode": "list", "placement": "bottom" }
-          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
           "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 }
+        },
+
+        /* === NEW PANELS === */
+        {
+          "type": "timeseries",
+          "title": "autoscale-probe Pods Up (count)",
+          "targets": [
+            { "expr": "sum(up{job=\"autoscale-probe\"})", "legendFormat": "up" }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 }
+        },
+        {
+          "type": "state-timeline",
+          "title": "autoscale-probe Pod Health (per pod)",
+          "targets": [
+            { "expr": "max by (pod) (up{job=\"autoscale-probe\"})", "legendFormat": "{{pod}}" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": { "text": "Down", "color": "red" },
+                    "1": { "text": "Up",   "color": "green" }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 }
         }
       ]
     }
