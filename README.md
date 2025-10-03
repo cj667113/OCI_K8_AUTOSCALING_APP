@@ -150,9 +150,9 @@ kubectl -n monitoring get svc prometheus
 
 The HPA targets **60% CPU** with `minReplicas: 1`, `maxReplicas: 20`.
 
-Generate sustained CPU load for 500s with concurrency 36:
+Generate sustained CPU load for 500s with concurrency 72:
 ```bash
-hey -z 500s -c 36 -disable-keepalive "http://<APP_LB_IP>/burn?cpu_ms=750"
+hey -z 500s -c 72 -disable-keepalive "http://<APP_LB_IP>/burn?cpu_ms=100"
 ```
 
 Observe metrics and scaling:
@@ -225,7 +225,7 @@ kubectl -n kube-system logs -f deploy/cluster-autoscaler | egrep -i "scale-down|
 kubectl get nodes -w
 
 # Load test (replace APP_LB_IP)
-hey -z 500s -c 36 -disable-keepalive "http://<APP_LB_IP>/burn?cpu_ms=750"
+hey -z 500s -c 72 -disable-keepalive "http://<APP_LB_IP>/burn?cpu_ms=100"
 ```
 
 ---
