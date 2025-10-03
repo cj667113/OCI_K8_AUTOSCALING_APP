@@ -1,4 +1,4 @@
-# OCI OKE Autoscale Demo — Two Load Balancers (App + Grafana)
+# OCI OKE Autoscale Demo
 
 Deploy a CPU‑intensive demo app (**autoscale-probe**) and a separate **Grafana** deployment.  
 Each component is exposed through its **own** OCI Layer‑7 Load Balancer **on port 80**.
