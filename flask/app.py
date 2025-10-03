@@ -8,7 +8,7 @@ from prometheus_client import (
 )
 
 # ---------- Config (env vars)
-MAX_INFLIGHT = int(os.getenv("MAX_INFLIGHT", "200"))     # cap concurrent /hot handlers
+MAX_INFLIGHT = int(os.getenv("MAX_INFLIGHT", "200"))     # cap concurrent /burn handlers
 CPU_MS       = int(os.getenv("CPU_MS", "20"))            # default burn per request (ms)
 PBKDF2_ITERS = int(os.getenv("PBKDF2_ITERS", "200000"))  # PBKDF2 iterations
 ENABLE_K8S   = os.getenv("ENABLE_K8S_WATCHERS", "1") == "1"
@@ -44,38 +44,21 @@ def _busy_ms(ms: int):
     while time.time() < end:
         hashlib.pbkdf2_hmac("sha256", _payload, _salt, PBKDF2_ITERS)
 
-def _burn_parallel(ms: int, parallel: int):
-    threads = []
-    for _ in range(parallel):
-        t = threading.Thread(target=_busy_ms, args=(ms,))
-        t.start()
-        threads.append(t)
-    for t in threads:
-        t.join()
-
 # ---------- Flask app
 app = Flask(__name__)
 application = app  # mod_wsgi compatibility
 
-@app.get("/hot")
-def hot():
+@app.get("/burn")
+def burn():
     # simple CPU burner; no request metrics exported
     try:
         ms = max(0, int(request.args.get("cpu_ms", CPU_MS)))
     except Exception:
         ms = CPU_MS
-    try:
-        parallel = int(request.args.get("parallel", "1"))
-    except Exception:
-        parallel = 1
-    parallel = max(1, min(parallel, (os.cpu_count() or 1) * 8))
 
     _gate.acquire()
     try:
-        if parallel == 1:
-            _busy_ms(ms)
-        else:
-            _burn_parallel(ms, parallel)
+        _busy_ms(ms)
         return "ok\n", 200
     finally:
         _gate.release()
@@ -92,9 +75,9 @@ def healthz():
 def root():
     return (
         "autoscale-probe endpoints:\n"
-        "  /hot?cpu_ms=NN&parallel=M   -> CPU burn (PBKDF2), blocks when saturated\n"
-        "  /metrics                    -> Prometheus exposition\n"
-        "  /healthz                    -> liveness/readiness\n",
+        "  /burn?cpu_ms=NN   -> CPU burn (PBKDF2), blocks when saturated\n"
+        "  /metrics          -> Prometheus exposition\n"
+        "  /healthz          -> liveness/readiness\n",
         200,
     )
 

@@ -152,7 +152,7 @@ The HPA targets **60% CPU** with `minReplicas: 1`, `maxReplicas: 20`.
 
 Generate sustained CPU load for 500s with concurrency 36:
 ```bash
-hey -z 500s -c 36 -disable-keepalive "http://<APP_LB_IP>/hot?cpu_ms=750&parallel=6"
+hey -z 500s -c 36 -disable-keepalive "http://<APP_LB_IP>/burn?cpu_ms=750"
 ```
 
 Observe metrics and scaling:
@@ -225,7 +225,7 @@ kubectl -n kube-system logs -f deploy/cluster-autoscaler | egrep -i "scale-down|
 kubectl get nodes -w
 
 # Load test (replace APP_LB_IP)
-hey -z 500s -c 36 -disable-keepalive "http://<APP_LB_IP>/hot?cpu_ms=750&parallel=6"
+hey -z 500s -c 36 -disable-keepalive "http://<APP_LB_IP>/burn?cpu_ms=750"
 ```
 
 ---
