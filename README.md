@@ -7,7 +7,7 @@ Each component is exposed through its **own** OCI Layer‑7 Load Balancer **on p
 - **Health:** `http://<APP_LB_IP>/healthz`  
 - **Grafana:** `http://<GRAFANA_LB_IP>/` (port **80** → container **3000**, default creds `admin` / `admin` — change in prod)
 
-> The manifest includes: Metrics Server, Prometheus, HorizontalPodAutoscaler (HPA), and RBAC for enabling the OCI Cluster Autoscaler add‑on.
+> The manifest includes: Metrics Server, Prometheus, HorizontalPodAutoscaler (HPA) (Ensure the OCI Cluster Autoscaler add‑on is Enabled).
 
 ---
 
@@ -59,7 +59,7 @@ Internet  ----------->|   Port 80 ---> / (App)      |         |   Port 80 ---> /
 Namespaces:
 - autoscale   : app + Services (LB + metrics) + HPA
 - monitoring  : Grafana + Prometheus + Grafana provisioning ConfigMaps
-- kube-system : metrics-server + Cluster Autoscaler RBAC (enable addon in OKE)
+- kube-system : metrics-server + Cluster Autoscaler (enable addon in OKE)
 ```
 
 ---
@@ -83,7 +83,7 @@ Namespaces:
 
 - **Namespace `kube-system`**
   - `metrics-server` (Deployment + APIService `v1beta1.metrics.k8s.io`)
-  - **Cluster Autoscaler RBAC** (enable the addon in OKE via OCI CLI)
+  - **Cluster Autoscaler** (enable the addon in OKE via OCI CLI)
 
 ---
 
