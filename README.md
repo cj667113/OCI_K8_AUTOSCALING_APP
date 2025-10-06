@@ -71,6 +71,7 @@ Namespaces:
   - `Service autoscale-probe-lb` (type **LoadBalancer**, port **80** → app)
   - `Service autoscale-probe-metrics` (ClusterIP for Prometheus scraping)
   - `HorizontalPodAutoscaler autoscale-probe-hpa` (60% CPU, 1→20 replicas)
+    - Cluster Autoscaler adds nodes when pods become unschedulable and removes them when nodes are underused.
 
 - **Namespace `monitoring`**
   - `Deployment grafana` + `Service grafana` (**LoadBalancer** on port **80**)
