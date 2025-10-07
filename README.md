@@ -59,7 +59,7 @@ Internet  ----------->|   Port 80 ---> / (App)      |         |   Port 80 ---> /
 Namespaces:
 - autoscale   : app + Services (LB + metrics) + HPA
 - monitoring  : Grafana + Prometheus + Grafana provisioning ConfigMaps
-- kube-system : metrics-server + Cluster Autoscaler (enable addon in OKE)
+- kube-system : metrics-server + Cluster Autoscaler (enable addons in OKE)
 ```
 
 ---
@@ -82,8 +82,8 @@ Namespaces:
   - `Deployment prometheus` + `Service prometheus` (ClusterIP)
 
 - **Namespace `kube-system`**
-  - `metrics-server` (Deployment + APIService `v1beta1.metrics.k8s.io`)
-  - **Cluster Autoscaler** (enable the addon in OKE via OCI CLI)
+  - `metrics-server` (enable the addon in OKE)
+  - **Cluster Autoscaler** (enable the addon in OKE)
 
 ---
 
