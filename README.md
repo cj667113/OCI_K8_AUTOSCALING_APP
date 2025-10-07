@@ -84,7 +84,7 @@ Namespaces:
 - **Namespace `kube-system`**
   - `cert-manager` (enable the addon in OKE)
   - `metrics-server` (enable the addon in OKE)
-  - `Cluster Autoscaler*` (enable the addon in OKE)
+  - `Cluster Autoscaler` (enable the addon in OKE)
 
 ---
 
